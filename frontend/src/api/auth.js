@@ -20,9 +20,13 @@ export const authApi = {
   },
 
   logout: async refreshToken => {
-    await apiClient.post('/auth/logout/', {
-      refresh: refreshToken
-    });
+    try {
+      await apiClient.post('/auth/logout/', {
+        refresh: refreshToken
+      });
+    } catch {
+      // ignore
+    }
   },
 
   getProfile: async () => {
@@ -44,7 +48,7 @@ export const authApi = {
   },
 
   searchUsers: async query => {
-    const response = await apiClient.get(`/auth/users/?search=${query}`);
+    const response = await apiClient.get(`/auth/users/?search=${encodeURIComponent(query)}`);
     return response.data;
   },
 

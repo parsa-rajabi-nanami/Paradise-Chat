@@ -94,7 +94,7 @@ export function MessageBubble({
                     </div>
 
                     {/* Actions */}
-                    {/* TODO: Check Mobile hover */}
+                    {/* TODO: Check Mobile hover And Better Ui */}
                     {isOwn && <div className="hidden group-hover:flex mt-1 space-x-1 justify-end">
                         <button
                             className="p-1 rounded text-[var(--color-text-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text)]"

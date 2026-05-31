@@ -77,12 +77,16 @@
 
   html,
   body {
-    height: max-content;
+    height: 100%;
+    min-height: 100vh;
     margin: 0;
     padding: 0;
     background: var(--color-bg);
     color: var(--color-text);
-    transition: background-color 0.3s ease, color 0.3s ease;
+    transition: background-color 0.3s ease,
+      color 0.3s ease,
+      border-color 0.3s ease;
+    ;
   }
 
   ::selection {
@@ -114,6 +118,11 @@
   }
 
   /* scrollbar Style */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-text-muted) transparent;
+  }
+
   ::-webkit-scrollbar {
     @apply w-[10px] h-[10px];
   }
@@ -183,6 +192,7 @@
   }
 
   .bg-pattern-1>div {
+    position: relative;
     z-index: 1;
   }
 

@@ -224,6 +224,19 @@ export const useChatStore = create((set, get) => ({
     });
   },
 
+  applyMessageUpdate: (roomId, updatedMessage) => {
+    set(state => ({
+      messages: {
+        ...state.messages,
+        [roomId]: (state.messages[roomId] || []).map(m =>
+          m.id === updatedMessage.id
+            ? updatedMessage
+            : m
+        )
+      }
+    }));
+  },
+
   updateMessage: async (roomId, messageId, newContent) => {
     try {
       const updatedMessage = await chatApi.editMessage(

@@ -155,17 +155,12 @@ class WebSocketService {
         }
         break;
       case 'edit':
-        // TODO: Chack edit meessage live change
         if (data.message && this.roomId) {
-          set(state => ({
-            messages: {
-              ...state.messages,
-              [this.roomId]: (state.messages[this.roomId] || []).map(m =>
-                m.id === data.message.id ? data.message : m
-              )
-            }
-          }))
-        };
+          chatStore.applyMessageUpdate(
+            this.roomId,
+            data.message
+          );
+        }
         break;
       case 'delete':
         if (data.message_id && this.roomId) {
