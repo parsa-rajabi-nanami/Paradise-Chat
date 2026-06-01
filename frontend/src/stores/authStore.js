@@ -66,7 +66,8 @@ export const useAuthStore = create()(persist((set, get) => ({
 
   setTokens: tokens => {
     set({
-      tokens
+      tokens,
+      isAuthenticated: !!tokens?.access
     });
   },
 
@@ -82,12 +83,16 @@ export const useAuthStore = create()(persist((set, get) => ({
       set({
         user
       });
-    } catch {
-      set({
-        user: null,
-        tokens: null,
-        isAuthenticated: false
-      });
+    } catch (error) {
+      if (error.status === 401) {
+        set({
+          user: null,
+          tokens: null,
+          isAuthenticated: false
+        });
+      }
+
+      throw error;
     }
   },
 

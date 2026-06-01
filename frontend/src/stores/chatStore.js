@@ -87,10 +87,19 @@ export const useChatStore = create((set, get) => ({
 
     await chatApi.leaveRoom(roomId);
 
-    set(state => ({
-      rooms: state.rooms.filter(r => r.id !== roomId),
-      activeRoom: state.activeRoom?.id === roomId ? null : state.activeRoom
-    }));
+    set(state => {
+      const newMessages = { ...state.messages };
+      delete newMessages[roomId];
+
+      return {
+        rooms: state.rooms.filter(r => r.id !== roomId),
+        activeRoom:
+          state.activeRoom?.id === roomId
+            ? null
+            : state.activeRoom,
+        messages: newMessages
+      };
+    });
   },
 
   updateParticipantRole: async (roomId, userId, role) => {
@@ -99,6 +108,8 @@ export const useChatStore = create((set, get) => ({
 
       set(state => {
         const updateRoomParticipants = (room) => {
+          if (!room) return room;
+
           if (room.id !== roomId) return room;
           return {
             ...room,
@@ -127,6 +138,8 @@ export const useChatStore = create((set, get) => ({
 
       set(state => {
         const filterRoomParticipants = (room) => {
+          if (!room) return room;
+
           if (room.id !== roomId) return room;
           return {
             ...room,
@@ -153,7 +166,17 @@ export const useChatStore = create((set, get) => ({
 
       set(state => {
         const addToRoom = room => {
+          if (!room) return room;
+
           if (room.id !== roomId) return room;
+
+          if (
+            room.participants_info.some(
+              p => p.user.id === user.id
+            )
+          ) {
+            return room;
+          }
 
           return {
             ...room,
@@ -189,7 +212,7 @@ export const useChatStore = create((set, get) => ({
       set(state => ({
         messages: {
           ...state.messages,
-          [roomId]: Array.isArray(messages) ? messages.reverse() : []
+          [roomId]: Array.isArray(messages) ? [...messages].reverse() : []
         }
       }));
     } catch (error) {
@@ -260,6 +283,28 @@ export const useChatStore = create((set, get) => ({
     }
   },
 
+  applyMessageDelete: (
+    roomId,
+    messageId
+  ) => {
+    set(state => ({
+      messages: {
+        ...state.messages,
+        [roomId]: (
+          state.messages[roomId] || []
+        ).map(m =>
+          m.id === messageId
+            ? {
+              ...m,
+              is_deleted: true,
+              content: 'This message has been deleted'
+            }
+            : m
+        )
+      }
+    }));
+  },
+
   deleteMessage: async (roomId, messageId) => {
     try {
       await chatApi.deleteMessage(roomId, messageId);
@@ -287,7 +332,13 @@ export const useChatStore = create((set, get) => ({
 
   setUserTyping: (roomId, userId, username, isTyping) => {
     set(state => {
-      const roomTyping = state.typingUsers[roomId] || [];
+      const now = Date.now();
+      const roomTyping = (
+        state.typingUsers[roomId] || []
+      ).filter(
+        t => now - t.timestamp < 10000
+      );
+
       if (isTyping) {
         // Add or update typing user
         const existing = roomTyping.find(t => t.userId === userId);

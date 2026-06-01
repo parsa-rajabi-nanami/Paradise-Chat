@@ -11,7 +11,7 @@ class WebSocketService {
   reconnectTimeout = null;
   heartbeatInterval = null;
   messageHandlers = [];
-  getApiUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api';
+  apiUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api';
 
   getWsUrl() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -66,6 +66,10 @@ class WebSocketService {
     }
 
     if (this.socket) {
+      this.socket.onopen = null;
+      this.socket.onmessage = null;
+      this.socket.onerror = null;
+      this.socket.onclose = null;
       this.socket.close();
       this.socket = null;
     }
@@ -164,7 +168,10 @@ class WebSocketService {
         break;
       case 'delete':
         if (data.message_id && this.roomId) {
-          chatStore.deleteMessage(this.roomId, data.message_id);
+          chatStore.applyMessageDelete(
+            this.roomId,
+            data.message_id
+          );
         }
         break;
       case 'user_join':
@@ -179,14 +186,23 @@ class WebSocketService {
     }
 
     // Notify external handlers
-    this.messageHandlers.forEach(handler => handler(data));
+    this.messageHandlers.forEach(handler => {
+      try {
+        handler(data);
+      } catch (error) {
+        console.error(
+          'Message handler error:',
+          error
+        );
+      }
+    });
   }
 
-  sendMessage({ room = "", content = "", file = null, replyTo = null }) {
+  async sendMessage({ room = "", content = "", file = null, replyTo = null }) {
     if (file) {
       const token = useAuthStore.getState().tokens?.access;
       const formData = new FormData();
-      const url = `${this.getApiUrl}/chat/rooms/${this.roomId}/messages/`;
+      const url = `${this.apiUrl}/chat/rooms/${this.roomId}/messages/`;
 
       formData.append("room_id", room);
       formData.append("content", content || "");
@@ -196,13 +212,21 @@ class WebSocketService {
         formData.append("reply_to", replyTo);
       }
 
-      return fetch(url, {
+      const response = await fetch(url, {
         method: "POST",
         body: formData,
         headers: {
           Authorization: `Bearer ${token}`
         }
       });
+
+      if (!response.ok) {
+        throw new Error(
+          `Upload failed (${response.status})`
+        );
+      }
+
+      return response.json();
     }
     if (this.socket?.readyState === WebSocket.OPEN) {
       this.socket.send(JSON.stringify({
@@ -258,13 +282,17 @@ class WebSocketService {
 
   scheduleReconnect() {
     this.reconnectAttempts++;
-    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
 
-    console.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
+    const currentRoomId = this.roomId;
+
+    const delay = Math.min(
+      1000 * Math.pow(2, this.reconnectAttempts),
+      30000
+    );
 
     this.reconnectTimeout = setTimeout(() => {
-      if (this.roomId) {
-        this.connectToRoom(this.roomId);
+      if (currentRoomId) {
+        this.connectToRoom(currentRoomId);
       }
     }, delay);
   }

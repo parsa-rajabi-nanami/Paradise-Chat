@@ -71,6 +71,10 @@ frontend/
 * [ ] Pagination improvements
 * [ ] View-based message actions
 
+### Frontend
+
+* [ ] Support editing messages with attachments
+
 ### Infrastructure
 
 * [ ] Docker support
