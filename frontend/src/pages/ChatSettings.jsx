@@ -36,11 +36,11 @@ export function ChatSettings() {
 
   useEffect(() => {
     return () => {
-      if (previewAvatar && previewAvatar.startsWith("blob:")) {
+      if (previewAvatar?.startsWith("blob:")) {
         URL.revokeObjectURL(previewAvatar);
       }
     };
-  }, []);
+  }, [previewAvatar]);
 
   useEffect(() => {
     if (!searchQuery.trim() || !room) {
@@ -81,9 +81,6 @@ export function ChatSettings() {
     if (!file.type.startsWith("image/")) {
       toast.error("Only image allowed");
       return;
-    }
-    if (previewAvatar?.startsWith("blob:")) {
-      URL.revokeObjectURL(previewAvatar);
     }
 
     setAvatar(file);

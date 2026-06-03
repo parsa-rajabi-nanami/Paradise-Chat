@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Avatar } from '../../components/ui/Avatar';
 import {
-    X, Edit2, UserPlus, Shield,
+    X, Edit2, Shield,
     ShieldCheck, User, Trash2, LogOut, UserMinus
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
@@ -23,7 +23,7 @@ export function ChatDetails({ room, onClose, currentUser }) {
     const isDirect = room.room_type === 'direct';
 
     const ownersCount = room.participants_info.filter(p => p.role === 'owner').length;
-    const participantCount = room.participants_info.length;
+    const participantCount = room.participants_info?.length || 0;
 
     const RoleBadge = ({ role }) => {
         if (role === 'owner') return <span className="flex items-center text-[10px] bg-amber-500/20 text-amber-500 px-2 py-0.5 rounded-full"><ShieldCheck className="w-3 h-3 mr-1" /> Owner</span>;
@@ -36,7 +36,7 @@ export function ChatDetails({ room, onClose, currentUser }) {
             await leaveRoom(room.id);
             toast.success('left the group');
             onClose?.();
-            navigate('/chats');
+            navigate('/chat');
         } catch (error) {
             toast.error(
                 error.response?.data?.message ||

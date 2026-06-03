@@ -2,9 +2,10 @@ import { CheckCheck, Edit2, Trash2, Paperclip } from 'lucide-react';
 import { Avatar } from '../../components/ui/Avatar';
 import clsx from 'clsx';
 import { format } from 'date-fns';
+import { memo } from 'react';
 
 
-export function MessageBubble({
+function MessageBubble({
     room_id,
     message,
     isOwn,
@@ -67,8 +68,7 @@ export function MessageBubble({
                                 ) : (
                                     <a
                                         href={message.attachment}
-                                        download={getFileName(message.attachment)}
-                                        target="_blank"
+                                        download
                                         rel="noreferrer"
                                         className={clsx(
                                             "flex items-center gap-2 rounded-md px-3 py-2 border text-sm border-[var(--color-secondary)]",
@@ -114,3 +114,5 @@ export function MessageBubble({
         </div>
     );
 }
+
+export default memo(MessageBubble);

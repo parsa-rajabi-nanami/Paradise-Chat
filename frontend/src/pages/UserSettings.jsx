@@ -158,7 +158,7 @@ export function UserSettings() {
             <button onClick={() => setDeleteModal(false)} className="flex-1 btn btn-outline">
               Cancel
             </button>
-            <button onClick={handleDeleteAccount} disabled={deleting} className="flex-1 btn btn-primary">
+            <button type="button" onClick={handleDeleteAccount} disabled={deleting} className="flex-1 btn btn-primary">
               {deleting ? "Deleting..." : "Delete"}
             </button>
           </div>

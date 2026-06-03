@@ -27,7 +27,7 @@ export function Sidebar({
 
   const [searchQuery, setSearchQuery] = useState('');
   const [showNewChat, setShowNewChat] = useState(false);
-  const filteredRooms = rooms.filter(room => room.display_name.toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredRooms = rooms.filter(room => (room.display_name || "").toLowerCase().includes(searchQuery.toLowerCase()));
 
   const handleLogout = async () => {
     try {

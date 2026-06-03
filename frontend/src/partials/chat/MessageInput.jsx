@@ -62,6 +62,10 @@ export function MessageInput({
     setMessage('');
     setFile(null);
 
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+
     if (isTyping) {
       setIsTyping(false);
       wsService.sendTyping(false);
@@ -110,7 +114,7 @@ export function MessageInput({
         {/* Send button */}
         <button
           type="submit"
-          disabled={!message.trim()}
+          disabled={!message.trim() && !file}
           className={clsx(
             'btn-input-msg mr-auto',
             message.trim() && 'bg-[var(--color-primary)] text-[var(--color-secondary-text)] hover:bg-[var(--color-secondary)]'

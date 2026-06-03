@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { format, isToday, isYesterday } from 'date-fns';
 import { useAuthStore } from '../../stores/authStore';
 import { useChatStore } from '../../stores/chatStore';
-import { MessageBubble } from './MessageBubble';
+import MessageBubble from './MessageBubble';
 
 
 // TODO: add pin message feature

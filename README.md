@@ -74,6 +74,8 @@ frontend/
 ### Frontend
 
 * [ ] Support editing messages with attachments
+* [ ] Improve chat auto-scroll behavior (only scroll when user is near the bottom)
+* [ ] Replace browser prompt with edit message modal
 
 ### Infrastructure
 

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Avatar } from '../../components/ui/Avatar';
 import { ChatDetails } from './ChatDetails';
 import { useAuthStore } from "../../stores/authStore";
-import { Phone, MoreVertical, Users, ArrowLeft } from 'lucide-react';
+import { MoreVertical, Users, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 
@@ -11,13 +11,13 @@ export function ChatHeader({
 }) {
   const navigate = useNavigate();
 
-  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
-  const otherParticipant = room.room_type === 'direct' ? room.participants_info.find(p => p.user.display_name !== room.display_name)?.user : null;
-  const isOnline = otherParticipant?.is_online;
-  const participantCount = room.participants_info.length;
   const {
     user,
   } = useAuthStore();
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const otherParticipant = room.room_type === 'direct' ? room.participants_info.find(p => p.user.id !== user?.id)?.user : null;
+  const isOnline = otherParticipant?.is_online;
+  const participantCount = room.participants_info?.length || 0;
 
   const handleOpenDetails = () => {
     setIsDetailsOpen(true);
@@ -32,7 +32,10 @@ export function ChatHeader({
       <div className="h-16 px-4 flex items-center justify-between bg-[var(--color-surface)] text-[var(--color-text)]">
         <div
           className="flex items-center space-x-3 cursor-pointer"
-          onClick={handleOpenDetails}
+          onClick={(e) => {
+            e.stopPropagation();
+            navigate('/chat');
+          }}
         >
           <button
             onClick={() => navigate('/chat')}
