@@ -2,7 +2,7 @@
 Views for user authentication and profile management.
 """
 
-from rest_framework import generics, status
+from rest_framework import generics, status, throttling
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -158,10 +158,21 @@ class OnlineUsersView(APIView):
         return Response(serializer.data)
 
 
+class DeleteAccountThrottle(throttling.UserRateThrottle):
+    """
+    Restricts account deletion attempts to reduce the impact of
+    compromised credentials, automated abuse, or repeated destructive
+    requests against a user account.
+    """
+
+    scope = "delete_account"
+
+
 class DeleteAccountView(APIView):
     """Account deletion endpoint."""
 
     permission_classes = (IsAuthenticated,)
+    throttle_classes = [DeleteAccountThrottle]
 
     @transaction.atomic
     def delete(self, request):

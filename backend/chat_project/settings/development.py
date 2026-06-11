@@ -6,6 +6,9 @@ from datetime import timedelta
 from .base import *
 
 DEBUG = True
+
+# Development-only secret key.
+# Never use this value in staging or production environments.
 SECRET_KEY = "django-insecure-dev-key-change-in-production-12345"
 
 ALLOWED_HOSTS = ["localhost", "127.0.0.1", "0.0.0.0"]

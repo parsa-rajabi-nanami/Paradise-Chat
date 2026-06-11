@@ -239,6 +239,12 @@ class ChatRoomCreateSerializer(serializers.ModelSerializer):
         fields = ("name", "room_type", "description", "participant_ids", "parent")
 
     def validate(self, attrs):
+        request = self.context.get("request")
+        if not request:
+            raise serializers.ValidationError("Request context is required.")
+
+        user = request.user
+
         room_type = attrs.get("room_type")
         parent = attrs.get("parent")
         participant_ids = attrs.get("participant_ids")

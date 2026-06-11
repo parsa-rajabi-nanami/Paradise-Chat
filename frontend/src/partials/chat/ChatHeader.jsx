@@ -34,11 +34,14 @@ export function ChatHeader({
           className="flex items-center space-x-3 cursor-pointer"
           onClick={(e) => {
             e.stopPropagation();
-            navigate('/chat');
+            handleOpenDetails();
           }}
         >
           <button
-            onClick={() => navigate('/chat')}
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate('/chat');
+            }}
             className="md:hidden p-2 -ml-2 rounded transition-colors text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-border)]"
           >
             <ArrowLeft className="w-5 h-5" />
