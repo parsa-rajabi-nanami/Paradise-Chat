@@ -6,7 +6,7 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from accounts.serializers import UserMinimalSerializer
 from django.conf import settings
-from .models import ChatRoom, RoomParticipant, Message, MessageRead
+from .models import ChatRoom, RoomParticipant, Message
 
 User = get_user_model()
 
@@ -93,7 +93,7 @@ class MessageCreateSerializer(serializers.ModelSerializer):
         valid_types = [choice[0] for choice in Message.MESSAGE_TYPES]
         message_type = attrs.get("message_type", "text")
         if message_type not in valid_types:
-            raise serializers.ValidationError(f"Invalid message type.")
+            raise serializers.ValidationError("Invalid message type.")
 
         if reply_to and reply_to.room_id != room.id:
             raise serializers.ValidationError(
@@ -204,7 +204,7 @@ class ChatRoomSerializer(serializers.ModelSerializer):
             others = [p.user for p in participants if p.user != request.user]
             if others:
                 return others[0].get_display_name()
-        return obj.name or f"Group"
+        return obj.name or "Group"
 
     def get_display_avatar(self, obj):
         request = self.context.get("request")

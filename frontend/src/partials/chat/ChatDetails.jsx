@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Avatar } from '../../components/ui/Avatar';
 import {
     X, Edit2, Shield,

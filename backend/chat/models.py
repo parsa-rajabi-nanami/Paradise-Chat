@@ -7,7 +7,6 @@ from django.db import models
 from django.conf import settings
 from django.utils import timezone
 from django.db import transaction
-from django.core.validators import FileExtensionValidator
 from .validators import validate_attachment
 from accounts.validators import validate_avatar
 

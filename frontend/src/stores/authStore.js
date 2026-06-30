@@ -100,12 +100,8 @@ export const useAuthStore = create()(persist((set, get) => ({
     const {
       fetchProfile
     } = get();
-    try {
-      await authApi.updateProfile(formData);
-      await fetchProfile();
-    } catch (error) {
-      throw error;
-    }
+    await authApi.updateProfile(formData);
+    await fetchProfile();
   },
 
   deleteAccount: async (password, passphrase) => {

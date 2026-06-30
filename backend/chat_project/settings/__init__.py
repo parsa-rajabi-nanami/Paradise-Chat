@@ -9,6 +9,6 @@ if environment == "production":
             "DJANGO_SECRET_KEY environment variable must be set in production."
         )
 
-    from .production import *
+    from .production import *  # noqa: F401, F403
 else:
-    from .development import *
+    from .development import *  # noqa: F401, F403

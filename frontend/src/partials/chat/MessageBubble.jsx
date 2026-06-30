@@ -22,7 +22,7 @@ function MessageBubble({
         }
     };
 
-    const handleUpdateMessage = e => {
+    const handleUpdateMessage = () => {
         const newContent = prompt("Edit your message:", message.content);
         if (newContent && newContent !== message.content) {
             updateMessage(room_id, message.id, newContent);

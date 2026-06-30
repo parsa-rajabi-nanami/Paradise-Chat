@@ -30,7 +30,7 @@ export function EmptyState() {
           <div className="card p-4">
             <Users className="w-6 h-6 mx-auto mb-2 text-[var(--color-online)]" />
             <p className="text-sm text-[var(--color-text)]">Online Status</p>
-            <p className="text-xs text-[var(--color-text-muted)]">See who's active</p>
+            <p className="text-xs text-[var(--color-text-muted)]">See who&apos;s active</p>
           </div>
           <div className="card p-4">
             <MessageSquare className="w-6 h-6 mx-auto mb-2 text-[var(--color-secondary)]" />

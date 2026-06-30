@@ -8,15 +8,14 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import ValidationError, PermissionDenied
 from rest_framework.parsers import MultiPartParser, FormParser
-from django.db.models import Q, Max, Subquery, OuterRef, Count
+from django.db.models import Q, Max
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
-from django.utils import timezone
 from django.contrib.auth import get_user_model
 from .utils import flatten_rooms
-from .models import ChatRoom, RoomParticipant, Message, MessageRead
+from .models import ChatRoom, RoomParticipant, Message
 from .serializers import (
     ChatRoomSerializer,
     ChatRoomCreateSerializer,

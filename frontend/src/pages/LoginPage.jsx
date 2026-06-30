@@ -101,7 +101,7 @@ export function LoginPage() {
 
           <div className="mt-6 text-center">
             <p className='text-[var(--color-text-muted)]'>
-              Don't have an account?{' '}
+              Don&apos;t have an account?{' '}
               <Link to="/register" className="font-medium">
                 Sign up
               </Link>

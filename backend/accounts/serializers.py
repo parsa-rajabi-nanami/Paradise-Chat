@@ -8,7 +8,6 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from .validators import validate_passphrase
 from rest_framework.exceptions import AuthenticationFailed
-from django.contrib.auth.hashers import check_password
 import re
 
 User = get_user_model()
@@ -211,7 +210,6 @@ class PasswordChangeSerializer(serializers.Serializer):
         return value
 
     def validate(self, attrs):
-        user = self.context["request"].user
         new_passphrase = attrs.get("new_passphrase")
 
         if new_passphrase:

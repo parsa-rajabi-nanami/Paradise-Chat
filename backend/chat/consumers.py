@@ -5,14 +5,12 @@ Handles messaging, typing indicators, and online status.
 
 import json
 import logging
-from datetime import datetime
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django.db.models import Q
 from .models import ChatRoom, Message, RoomParticipant
-from .serializers import MessageSerializer
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
