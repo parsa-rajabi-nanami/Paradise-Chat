@@ -75,12 +75,3 @@ logs/
 # Temporary
 tmp/
 temp/
-
-# Self-contained Claude workspace — force-track the entire vendored .claude/ tree
-# so a clone reproduces identical Claude behavior. Overrides generic ignores above
-# (lib/, dist/, build/, *.log, etc.) that would otherwise drop vendored plugin files.
-# settings.local.json stays ignored (machine-local) via the user's global gitignore.
-!.claude/
-!.claude/**
-# ...except machine-local settings (re-ignore after the broad negation)
-.claude/settings.local.json
