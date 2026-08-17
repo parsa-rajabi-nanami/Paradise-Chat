@@ -1,15 +1,16 @@
 import apiClient from './client';
 
-
 export const authApi = {
 
   login: async credentials => {
     const response = await apiClient.post('/auth/login/', credentials);
+    const data = response.data;
+
     return {
-      user: response.data.user,
+      user: data.user || null,
       tokens: {
-        access: response.data.access,
-        refresh: response.data.refresh
+        access: data.access || data.tokens?.access,
+        refresh: data.refresh || data.tokens?.refresh
       }
     };
   },
@@ -21,46 +22,49 @@ export const authApi = {
 
   logout: async refreshToken => {
     try {
-      await apiClient.post('/auth/logout/', {
-        refresh: refreshToken
-      });
+      if (refreshToken) {
+        await apiClient.post('/auth/logout/', {
+          refresh: refreshToken
+        });
+      }
     } catch {
-      // ignore
     }
   },
 
-  getProfile: async () => {
-    const response = await apiClient.get('/auth/profile/');
+  getProfile: async (config = {}) => {
+    const response = await apiClient.get('/auth/profile/', config);
     return response.data;
   },
 
-  updateProfile: async formData => {
-    const response = await apiClient.patch('/auth/profile/', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    });
+  updateProfile: async (data, config = {}) => {
+    const response = await apiClient.patch('/auth/profile/', data, config);
     return response.data;
   },
 
   changePassword: async data => {
-    await apiClient.post('/auth/password/change/', data);
-  },
-
-  searchUsers: async query => {
-    const response = await apiClient.get(`/auth/users/?search=${encodeURIComponent(query)}`);
+    const response = await apiClient.post('/auth/password/change/', data);
     return response.data;
   },
 
-  getOnlineUsers: async () => {
-    const response = await apiClient.get('/auth/users/online/');
-    return response.data;
-  },
-
-  deleteAccount: async data => {
-    await apiClient.delete('/auth/profile/delete/', {
-      data: data
+  searchUsers: async (query, config = {}) => {
+    const response = await apiClient.get('/auth/users/', {
+      params: typeof query === 'object' ? query : { search: query },
+      ...config
     });
+    return response.data.results || response.data;
+  },
+
+  getOnlineUsers: async (config = {}) => {
+    const response = await apiClient.get('/auth/users/online/', config);
+    return response.data.results || response.data;
+  },
+
+  deleteAccount: async (data = {}, config = {}) => {
+    const response = await apiClient.delete('/auth/profile/delete/', {
+      data,
+      ...config
+    });
+    return response.data;
   }
 
 };

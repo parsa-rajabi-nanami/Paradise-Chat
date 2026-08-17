@@ -35,6 +35,11 @@
 
   --shadow-soft: 0 2px 6px rgba(0, 0, 0, 0.08);
   --shadow-medium: 0 4px 12px rgba(0, 0, 0, 0.12);
+
+  /* Danger Background & Toast Light Theme */
+  --color-danger-bg: rgba(220, 20, 60, 0.1);
+  --toast-bg: #ffffff;
+  --toast-color: #1f2937;
 }
 
 
@@ -60,11 +65,16 @@
 
   --shadow-soft: 0 2px 6px rgba(0, 0, 0, 0.4);
   --shadow-medium: 0 4px 14px rgba(0, 0, 0, 0.45);
+
+  /* Danger Background & Toast Dark Theme */
+  --color-danger-bg: rgba(220, 20, 60, 0.2);
+  --toast-bg: #1f2937;
+  --toast-color: #f9fafb;
 }
 
 
 /* ----------------------------------------------------------
-   BASE CONFIGURATIO
+   BASE CONFIGURATION
 ----------------------------------------------------------- */
 @layer base {
   html {
@@ -111,12 +121,6 @@
     font-family: "Vazirmatn", var(--font-body);
   }
 
-  *,
-  *::before,
-  *::after {
-    @apply box-border;
-  }
-
   /* scrollbar Style */
   * {
     scrollbar-width: thin;
@@ -156,6 +160,11 @@
 }
 
 @layer components {
+  .dir-ltr {
+    direction: ltr;
+    text-align: left;
+  }
+
   .card {
     @apply rounded;
     background: var(--color-surface);
@@ -185,6 +194,7 @@
     opacity: 0.1;
     filter: invert(0);
     z-index: 0;
+    pointer-events: none;
   }
 
   .dark .bg-pattern-1::before {

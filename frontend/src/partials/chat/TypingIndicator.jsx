@@ -1,26 +1,41 @@
-export function TypingIndicator({
-  users
-}) {
-  if (users.length === 0) return null;
+export function TypingIndicator({ users = [] }) {
+  if (!users || users.length === 0) return null;
 
   const getTypingText = () => {
-    if (users.length === 1) {
-      return `${users[0].username} is typing`;
-    } else if (users.length === 2) {
-      return `${users[0].username} and ${users[1].username} are typing`;
-    } else {
-      return `${users[0].username} and ${users.length - 1} others are typing`;
+    const names = users.map((u) => u.display_name || u.username || 'Someone');
+
+    if (names.length === 1) {
+      return `${names[0]} is typing`;
     }
+    if (names.length === 2) {
+      return `${names[0]} and ${names[1]} are typing`;
+    }
+    return `${names[0]} and ${names.length - 1} others are typing`;
   };
 
   return (
-    <div className="px-4 py-2 flex items-center space-x-2">
-      <div className="typing-indicator">
-        <span />
-        <span />
-        <span />
+    <div
+      aria-live="polite"
+      className="px-4 py-1.5 flex items-center space-x-2 text-[var(--color-text-muted)] select-none transition-all duration-200"
+    >
+      {/* Animated Dots Container */}
+      <div className="flex items-center space-x-1">
+        <span
+          className="w-1.5 h-1.5 rounded-full bg-[var(--color-primary)] animate-bounce"
+          style={{ animationDelay: '0ms' }}
+        />
+        <span
+          className="w-1.5 h-1.5 rounded-full bg-[var(--color-primary)] animate-bounce"
+          style={{ animationDelay: '150ms' }}
+        />
+        <span
+          className="w-1.5 h-1.5 rounded-full bg-[var(--color-primary)] animate-bounce"
+          style={{ animationDelay: '300ms' }}
+        />
       </div>
-      <span className="text-sm text-gray-400">{getTypingText()}</span>
+
+      {/* Typing Text */}
+      <span className="text-xs font-medium italic">{getTypingText()}...</span>
     </div>
   );
 }

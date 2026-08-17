@@ -1,20 +1,27 @@
 import apiClient from './client';
 
-
 export const chatApi = {
 
-  getRooms: async () => {
-    const response = await apiClient.get('/chat/rooms/');
+  getRooms: async (params = {}, config = {}) => {
+    const response = await apiClient.get('/chat/rooms/', {
+      params,
+      ...config
+    });
     return response.data.results || response.data;
   },
 
-  getRoom: async roomId => {
-    const response = await apiClient.get(`/chat/rooms/${roomId}/`);
+  getRoom: async (roomId, config = {}) => {
+    const response = await apiClient.get(`/chat/rooms/${roomId}/`, config);
     return response.data;
   },
 
   createRoom: async data => {
     const response = await apiClient.post('/chat/rooms/', data);
+    return response.data;
+  },
+
+  updateRoom: async (roomId, formData) => {
+    const response = await apiClient.patch(`/chat/rooms/${roomId}/`, formData);
     return response.data;
   },
 
@@ -35,26 +42,30 @@ export const chatApi = {
 
   addParticipant: async (roomId, userId) => {
     const response = await apiClient.post(
-      `/chat/rooms/${roomId}/participants/${userId}/`
+      `/chat/rooms/${roomId}/participants/${userId}/`,
+      {}
     );
     return response.data;
   },
 
   createDirectMessage: async userId => {
     const response = await apiClient.post('/chat/direct/', {
-      room_type: "direct",
+      room_type: 'direct',
       participant_ids: [userId],
       user_id: userId
     });
     return response.data;
   },
 
-  getMessages: async (roomId, page = 1) => {
-    const response = await apiClient.get(`/chat/rooms/${roomId}/messages/?page=${page}`);
+  getMessages: async (roomId, page = 1, config = {}) => {
+    const response = await apiClient.get(`/chat/rooms/${roomId}/messages/`, {
+      params: typeof page === 'object' ? page : { page },
+      ...config
+    });
     return response.data;
   },
 
-  sendMessage: async (roomId, content, replyTo) => {
+  sendMessage: async (roomId, content, replyTo = null) => {
     const response = await apiClient.post(`/chat/rooms/${roomId}/messages/`, {
       content,
       reply_to: replyTo
@@ -74,26 +85,13 @@ export const chatApi = {
   },
 
   markAsRead: async roomId => {
-    await apiClient.post(`/chat/rooms/${roomId}/read/`);
+    await apiClient.post(`/chat/rooms/${roomId}/read/`, {});
   },
 
   updateTypingStatus: async (roomId, isTyping) => {
     await apiClient.post(`/chat/rooms/${roomId}/typing/`, {
       is_typing: isTyping
     });
-  },
-
-  updateRoom: async (roomId, formData) => {
-    const response = await apiClient.patch(
-      `/chat/rooms/${roomId}/`,
-      formData,
-      {
-        headers: {
-          "Content-Type": "multipart/form-data"
-        }
-      }
-    );
-    return response.data;
-  },
+  }
 
 };

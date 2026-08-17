@@ -1,18 +1,19 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
+import { PageLoader } from './PageLoader';
 
-
-export function ProtectedRoute({
-  children
-}) {
+export function ProtectedRoute({ children }) {
   const isAuthenticated = useAuthStore(state => state.isAuthenticated);
+  const isLoading = useAuthStore(state => state.isLoading);
   const location = useLocation();
 
-  if (!isAuthenticated) {
-    return <Navigate to="/login" state={{
-      from: location
-    }} replace />;
+  if (isLoading) {
+    return <PageLoader />;
   }
 
-  return <>{children}</>;
+  if (!isAuthenticated) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  return children;
 }

@@ -1,14 +1,18 @@
 import { useAuthStore } from '../stores/authStore';
 import { useChatStore } from '../stores/chatStore';
 
-
 class WebSocketService {
   socket = null;
   statusSocket = null;
   roomId = null;
+
   reconnectAttempts = 0;
   maxReconnectAttempts = 5;
   reconnectTimeout = null;
+
+  statusReconnectAttempts = 0;
+  statusReconnectTimeout = null;
+
   heartbeatInterval = null;
   messageHandlers = [];
   apiUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api';
@@ -19,28 +23,29 @@ class WebSocketService {
     return `${protocol}//${host}`;
   }
 
-  connectToRoom(roomId) {
+  connectToRoom(roomId, isReconnecting = false) {
     if (this.socket?.readyState === WebSocket.OPEN && this.roomId === roomId) {
       return;
     }
 
-    this.disconnectFromRoom();
+    this.disconnectFromRoom(!isReconnecting);
     this.roomId = roomId;
-    const token = useAuthStore.getState().tokens?.access;
 
+    const token = useAuthStore.getState().tokens?.access;
     if (!token) {
       console.error('No auth token available');
       return;
     }
 
     const url = `${this.getWsUrl()}/ws/chat/${roomId}/?token=${token}`;
-
     this.socket = new WebSocket(url);
+
     this.socket.onopen = () => {
       console.log(`Connected to room ${roomId}`);
       this.reconnectAttempts = 0;
     };
-    this.socket.onmessage = event => {
+
+    this.socket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
         this.handleMessage(data);
@@ -48,18 +53,20 @@ class WebSocketService {
         console.error('Failed to parse WebSocket message:', error);
       }
     };
-    this.socket.onclose = event => {
+
+    this.socket.onclose = (event) => {
       console.log(`Disconnected from room ${roomId}`, event.code);
       if (!event.wasClean && this.reconnectAttempts < this.maxReconnectAttempts) {
         this.scheduleReconnect();
       }
     };
-    this.socket.onerror = error => {
+
+    this.socket.onerror = (error) => {
       console.error('WebSocket error:', error);
     };
   }
 
-  disconnectFromRoom() {
+  disconnectFromRoom(resetReconnectCount = true) {
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = null;
@@ -75,7 +82,22 @@ class WebSocketService {
     }
 
     this.roomId = null;
-    this.reconnectAttempts = 0;
+    if (resetReconnectCount) {
+      this.reconnectAttempts = 0;
+    }
+  }
+
+  scheduleReconnect() {
+    this.reconnectAttempts++;
+    const currentRoomId = this.roomId;
+
+    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
+
+    this.reconnectTimeout = setTimeout(() => {
+      if (currentRoomId) {
+        this.connectToRoom(currentRoomId, true);
+      }
+    }, delay);
   }
 
   connectToStatus() {
@@ -84,17 +106,19 @@ class WebSocketService {
     }
 
     const token = useAuthStore.getState().tokens?.access;
-
     if (!token) return;
 
     const url = `${this.getWsUrl()}/ws/status/?token=${token}`;
 
     this.statusSocket = new WebSocket(url);
+
     this.statusSocket.onopen = () => {
       console.log('Connected to status updates');
+      this.statusReconnectAttempts = 0;
       this.startHeartbeat();
     };
-    this.statusSocket.onmessage = event => {
+
+    this.statusSocket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'status') {
@@ -104,19 +128,34 @@ class WebSocketService {
         console.error('Failed to parse status message:', error);
       }
     };
-    this.statusSocket.onclose = () => {
+
+    this.statusSocket.onclose = (event) => {
       console.log('Disconnected from status updates');
       this.stopHeartbeat();
+
+      if (!event.wasClean && this.statusReconnectAttempts < this.maxReconnectAttempts) {
+        this.statusReconnectAttempts++;
+        const delay = Math.min(1000 * Math.pow(2, this.statusReconnectAttempts), 30000);
+        this.statusReconnectTimeout = setTimeout(() => this.connectToStatus(), delay);
+      }
     };
   }
 
   disconnectFromStatus() {
     this.stopHeartbeat();
 
+    if (this.statusReconnectTimeout) {
+      clearTimeout(this.statusReconnectTimeout);
+      this.statusReconnectTimeout = null;
+    }
+
     if (this.statusSocket) {
+      this.statusSocket.onclose = null;
       this.statusSocket.close();
       this.statusSocket = null;
     }
+
+    this.statusReconnectAttempts = 0;
   }
 
   startHeartbeat() {
@@ -128,9 +167,7 @@ class WebSocketService {
 
     this.heartbeatInterval = setInterval(() => {
       if (this.statusSocket?.readyState === WebSocket.OPEN) {
-        this.statusSocket.send(JSON.stringify({
-          type: 'heartbeat'
-        }));
+        this.statusSocket.send(JSON.stringify({ type: 'heartbeat' }));
       } else {
         this.stopHeartbeat();
       }
@@ -155,65 +192,63 @@ class WebSocketService {
         break;
       case 'typing':
         if (this.roomId && data.user_id && data.username) {
-          chatStore.setUserTyping(this.roomId, data.user_id, data.username, data.is_typing || false);
+          chatStore.setUserTyping(
+            this.roomId,
+            data.user_id,
+            data.username,
+            data.is_typing || false
+          );
         }
         break;
       case 'edit':
         if (data.message && this.roomId) {
-          chatStore.applyMessageUpdate(
-            this.roomId,
-            data.message
-          );
+          chatStore.applyMessageUpdate(this.roomId, data.message);
         }
         break;
       case 'delete':
         if (data.message_id && this.roomId) {
-          chatStore.applyMessageDelete(
-            this.roomId,
-            data.message_id
-          );
+          chatStore.applyMessageDelete(this.roomId, data.message_id);
         }
         break;
       case 'user_join':
-        // TODO: User join Room, Could show notifications
-        break;
       case 'user_leave':
-        // TODO: User leave Room, Could show notifications
-        break;
       case 'read':
-        // TODO: Could update read receipts
+        break;
+      default:
         break;
     }
 
-    // Notify external handlers
-    this.messageHandlers.forEach(handler => {
+    this.messageHandlers.forEach((handler) => {
       try {
         handler(data);
       } catch (error) {
-        console.error(
-          'Message handler error:',
-          error
-        );
+        console.error('Message handler error:', error);
       }
     });
   }
 
-  async sendMessage({ room = "", content = "", file = null, replyTo = null }) {
+  async sendMessage({ room = null, content = '', file = null, replyTo = null }) {
+    const targetRoomId = room || this.roomId;
+
+    if (!targetRoomId) {
+      throw new Error('Cannot send message: No active room specified.');
+    }
+
     if (file) {
       const token = useAuthStore.getState().tokens?.access;
       const formData = new FormData();
-      const url = `${this.apiUrl}/chat/rooms/${this.roomId}/messages/`;
+      const url = `${this.apiUrl}/chat/rooms/${targetRoomId}/messages/`;
 
-      formData.append("room_id", room);
-      formData.append("content", content || "");
-      formData.append("attachment", file);
+      formData.append('room_id', targetRoomId);
+      formData.append('content', content || '');
+      formData.append('attachment', file);
 
       if (replyTo) {
-        formData.append("reply_to", replyTo);
+        formData.append('reply_to', replyTo);
       }
 
       const response = await fetch(url, {
-        method: "POST",
+        method: 'POST',
         body: formData,
         headers: {
           Authorization: `Bearer ${token}`
@@ -221,84 +256,80 @@ class WebSocketService {
       });
 
       if (!response.ok) {
-        throw new Error(
-          `Upload failed (${response.status})`
-        );
+        throw new Error(`Upload failed (${response.status})`);
       }
 
       return response.json();
     }
+
     if (this.socket?.readyState === WebSocket.OPEN) {
-      this.socket.send(JSON.stringify({
-        type: 'message',
-        content,
-        reply_to: replyTo
-      }));
+      this.socket.send(
+        JSON.stringify({
+          type: 'message',
+          content,
+          reply_to: replyTo
+        })
+      );
+      return true;
     }
+
+    throw new Error('WebSocket is not connected');
   }
 
   sendTyping(isTyping) {
     if (this.socket?.readyState === WebSocket.OPEN) {
-      this.socket.send(JSON.stringify({
-        type: 'typing',
-        is_typing: isTyping
-      }));
+      this.socket.send(
+        JSON.stringify({
+          type: 'typing',
+          is_typing: isTyping
+        })
+      );
     }
   }
 
   sendRead() {
     if (this.socket?.readyState === WebSocket.OPEN) {
-      this.socket.send(JSON.stringify({
-        type: 'read'
-      }));
+      this.socket.send(
+        JSON.stringify({
+          type: 'read'
+        })
+      );
     }
   }
 
   editMessage(messageId, content) {
     if (this.socket?.readyState === WebSocket.OPEN) {
-      this.socket.send(JSON.stringify({
-        type: 'edit',
-        message_id: messageId,
-        content
-      }));
+      this.socket.send(
+        JSON.stringify({
+          type: 'edit',
+          message_id: messageId,
+          content
+        })
+      );
     }
   }
 
   deleteMessage(messageId) {
     if (this.socket?.readyState === WebSocket.OPEN) {
-      this.socket.send(JSON.stringify({
-        type: 'delete',
-        message_id: messageId
-      }));
+      this.socket.send(
+        JSON.stringify({
+          type: 'delete',
+          message_id: messageId
+        })
+      );
     }
   }
 
   onMessage(handler) {
     this.messageHandlers.push(handler);
     return () => {
-      this.messageHandlers = this.messageHandlers.filter(h => h !== handler);
+      this.messageHandlers = this.messageHandlers.filter((h) => h !== handler);
     };
-  }
-
-  scheduleReconnect() {
-    this.reconnectAttempts++;
-
-    const currentRoomId = this.roomId;
-
-    const delay = Math.min(
-      1000 * Math.pow(2, this.reconnectAttempts),
-      30000
-    );
-
-    this.reconnectTimeout = setTimeout(() => {
-      if (currentRoomId) {
-        this.connectToRoom(currentRoomId);
-      }
-    }, delay);
   }
 
   isConnected() {
     return this.socket?.readyState === WebSocket.OPEN;
   }
 }
+
 export const wsService = new WebSocketService();

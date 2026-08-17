@@ -3,12 +3,25 @@
 
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#1a4a8d" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <!-- icon -->
+  <script>
+    try {
+      const savedTheme = localStorage.getItem('theme');
+      const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      
+      if (savedTheme === 'dark' || (!savedTheme && systemPrefersDark)) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    } catch (_) {}
+  </script>
+
+  <!-- Favicon & Icons -->
   <link rel="icon" type="image/svg+xml" href="/chat.svg" />
   <link rel="apple-touch-icon" href="/chat.svg" />
 
@@ -21,7 +34,7 @@
     content="chat app, realtime messaging, secure chat, websocket chat, online messaging, group chat, instant messaging, ParadiseChat" />
 
   <!-- Open Graph -->
-  <meta property="og:title" content="ParadiseChat" />
+  <meta property="og:title" content="ParadiseChat - RealTime Messaging" />
   <meta property="og:description" content="Fast and secure real-time messaging platform." />
   <meta property="og:type" content="website" />
   <meta property="og:image" content="%VITE_SITE_URL%/preview.png" />
@@ -29,7 +42,7 @@
 
   <!-- Twitter Cards -->
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="ParadiseChat" />
+  <meta name="twitter:title" content="ParadiseChat - RealTime Messaging" />
   <meta name="twitter:description" content="Fast and secure real-time messaging platform." />
   <meta name="twitter:image" content="%VITE_SITE_URL%/preview.png" />
 
@@ -39,13 +52,6 @@
 
 <body>
   <div id="root"></div>
-  <script>
-    const savedTheme = localStorage.getItem('theme') || 'light';
-    document.documentElement.classList.toggle(
-      'dark',
-      savedTheme === 'dark'
-    );
-  </script>
   <script type="module" src="/src/main.jsx"></script>
 </body>
 
