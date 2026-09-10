@@ -19,6 +19,8 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: true,
+    // Source maps stay out of public images by default. A release pipeline
+    // may enable private upload after wiring its error-tracking provider.
+    sourcemap: process.env.VITE_SOURCEMAP === 'true',
   },
 });

@@ -1,0 +1,16 @@
+"""HTTP correlation-id middleware."""
+
+import uuid
+
+
+class RequestIDMiddleware:
+    """Propagate a bounded request ID to responses and downstream logs."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        request.request_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex
+        response = self.get_response(request)
+        response["X-Request-ID"] = request.request_id
+        return response

@@ -6,14 +6,18 @@ from rest_framework import generics, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.exceptions import ValidationError, PermissionDenied
+from rest_framework.exceptions import NotFound, ValidationError, PermissionDenied
 from rest_framework.parsers import MultiPartParser, FormParser
+from django.http import FileResponse
+import mimetypes
+import os
 from django.db.models import Q, Max
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.contrib.auth import get_user_model
+from collections import defaultdict
 from .utils import flatten_rooms
 from .models import ChatRoom, RoomParticipant, Message
 from .serializers import (
@@ -45,8 +49,6 @@ class ChatRoomListView(generics.ListCreateAPIView):
             .order_by("-last_activity", "-updated_at")
             .prefetch_related(
                 "room_participants__user",
-                "subrooms",
-                "subrooms__room_participants__user",
             )
             .select_related("created_by")
         )
@@ -54,12 +56,30 @@ class ChatRoomListView(generics.ListCreateAPIView):
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()
 
-        flat = flatten_rooms(queryset, request.user)
+        visible_rooms = (
+            ChatRoom.objects.filter(
+                participants=request.user,
+                is_active=True,
+            )
+            .filter(Q(parent__isnull=True) | Q(parent__is_active=True))
+            .prefetch_related("room_participants__user")
+            .select_related("parent", "created_by")
+        )
+        children_by_parent = defaultdict(list)
+        for room in visible_rooms:
+            room.prefetched_participants = list(room.room_participants.all())
+            if room.parent_id:
+                children_by_parent[room.parent_id].append(room)
+
+        flat = flatten_rooms(
+            queryset, request.user, children_by_parent=children_by_parent
+        )
 
         serialized = []
         for item in flat:
             room = item["room"]
-            room.prefetched_participants = list(room.room_participants.all())
+            if not hasattr(room, "prefetched_participants"):
+                room.prefetched_participants = list(room.room_participants.all())
             data = ChatRoomSerializer(room, context={"request": request}).data
             data["depth"] = item["depth"]
             serialized.append(data)
@@ -303,6 +323,7 @@ class ManageParticipantView(APIView):
                 {
                     "type": "user_leave",
                     "user_id": user_id,
+                    "username": target.user.username,
                 },
             )
         return Response({"message": "User removed from room."}, status=200)
@@ -327,7 +348,9 @@ class MessageListView(generics.ListCreateAPIView):
             ).filter(Q(parent__isnull=True) | Q(parent__is_active=True)),
             id=room_id,
         )
-        return Message.objects.filter(room=room).select_related("sender", "reply_to")
+        return Message.objects.filter(room=room, is_deleted=False).select_related(
+            "sender", "reply_to"
+        )
 
     def create(self, request, *args, **kwargs):
         room_id = self.kwargs["room_id"]
@@ -375,6 +398,7 @@ class MessageDetailView(generics.RetrieveUpdateDestroyAPIView):
             Message.objects.select_related("sender", "room"),
             id=self.kwargs["message_id"],
             room_id=self.kwargs["room_id"],
+            is_deleted=False,
         )
         # Verify user is in the room
         if not message.room.participants.filter(id=self.request.user.id).exists():
@@ -447,6 +471,31 @@ class MessageDetailView(generics.RetrieveUpdateDestroyAPIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+class MessageAttachmentView(APIView):
+    """Stream an attachment only to an authenticated room participant."""
+
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request, message_id):
+        message = get_object_or_404(
+            Message.objects.select_related("room"),
+            id=message_id,
+            is_deleted=False,
+        )
+        if not message.room.participants.filter(id=request.user.id).exists():
+            raise PermissionDenied("You are not a member of this room.")
+        if not message.attachment or not message.attachment.name:
+            raise NotFound("This message has no attachment.")
+
+        message.attachment.open("rb")
+        content_type = mimetypes.guess_type(message.attachment.name)[0]
+        response = FileResponse(message.attachment, content_type=content_type)
+        response["Content-Disposition"] = (
+            f'inline; filename="{os.path.basename(message.attachment.name)}"'
+        )
+        return response
+
+
 class DirectMessageView(APIView):
     """Create or get existing direct message room with a user."""
 
@@ -515,6 +564,17 @@ class MarkAsReadView(APIView):
         participant = room.room_participants.filter(user=request.user).first()
         if participant:
             participant.mark_as_read()
+            channel_layer = get_channel_layer()
+            if channel_layer:
+                async_to_sync(channel_layer.group_send)(
+                    f"chat_{room.id}",
+                    {
+                        "type": "read_receipt",
+                        "user_id": request.user.id,
+                        "username": request.user.username,
+                        "read_at": participant.last_read_at.isoformat(),
+                    },
+                )
         return Response({"message": "Marked as read"})
 
 
@@ -535,4 +595,15 @@ class TypingStatusView(APIView):
         if not participant:
             return Response({"error": "Participant not found"}, status=404)
         participant.set_typing(is_typing)
+        channel_layer = get_channel_layer()
+        if channel_layer:
+            async_to_sync(channel_layer.group_send)(
+                f"chat_{room.id}",
+                {
+                    "type": "typing_indicator",
+                    "user_id": request.user.id,
+                    "username": request.user.username,
+                    "is_typing": bool(is_typing),
+                },
+            )
         return Response({"is_typing": is_typing})

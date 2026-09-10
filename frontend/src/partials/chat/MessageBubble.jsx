@@ -1,6 +1,7 @@
-import { useState, memo, useCallback } from 'react';
+import { useState, memo, useCallback, useEffect } from 'react';
 import { CheckCheck, Check, Edit2, Trash2, Paperclip, X, Check as SaveIcon } from 'lucide-react';
 import { Avatar } from '../../components/ui/Avatar';
+import { useAuthStore } from '../../stores/authStore';
 import clsx from 'clsx';
 import { format, isValid } from 'date-fns';
 
@@ -14,6 +15,36 @@ function MessageBubble({
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message?.content || '');
+  const [attachmentUrl, setAttachmentUrl] = useState(null);
+  const accessToken = useAuthStore((state) => state.tokens?.access);
+
+  useEffect(() => {
+    let objectUrl;
+    if (!message?.attachment || !accessToken) {
+      setAttachmentUrl(null);
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    fetch(message.attachment, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: controller.signal,
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error('Attachment request failed');
+        return response.blob();
+      })
+      .then((blob) => {
+        objectUrl = URL.createObjectURL(blob);
+        setAttachmentUrl(objectUrl);
+      })
+      .catch(() => setAttachmentUrl(null));
+
+    return () => {
+      controller.abort();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [message?.attachment, accessToken]);
 
   // Safe date formatting
   const formattedTime = useCallback(() => {
@@ -112,12 +143,12 @@ function MessageBubble({
             )}
 
             {/* Media & Attachment */}
-            {message?.attachment && (
+            {message?.attachment && attachmentUrl && (
               <div className="mb-2">
                 {message.message_type === 'image' ? (
-                  <a href={message.attachment} target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-lg">
+                  <a href={attachmentUrl} target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-lg">
                     <img
-                      src={message.attachment}
+                      src={attachmentUrl}
                       alt={getFileName(message.attachment)}
                       loading="lazy"
                       className="max-w-full max-h-72 object-cover rounded-lg hover:opacity-95 transition-opacity"
@@ -125,7 +156,7 @@ function MessageBubble({
                   </a>
                 ) : (
                   <a
-                    href={message.attachment}
+                    href={attachmentUrl}
                     download
                     target="_blank"
                     rel="noopener noreferrer"

@@ -3,6 +3,7 @@ Serializers for chat functionality.
 """
 
 from rest_framework import serializers
+from django.urls import reverse
 from django.contrib.auth import get_user_model
 from accounts.serializers import UserMinimalSerializer
 from django.conf import settings
@@ -15,6 +16,7 @@ class MessageSerializer(serializers.ModelSerializer):
     """Serializer for messages."""
 
     sender = UserMinimalSerializer(read_only=True)
+    attachment = serializers.SerializerMethodField()
     reply_to_preview = serializers.SerializerMethodField()
     is_own_message = serializers.SerializerMethodField()
 
@@ -56,6 +58,17 @@ class MessageSerializer(serializers.ModelSerializer):
             ),
             "sender": reply.sender.username if reply.sender else "Unknown",
         }
+
+    def get_attachment(self, obj):
+        if not obj.attachment or not obj.attachment.name:
+            return None
+        request = self.context.get("request")
+        path = reverse("message_attachment", kwargs={"message_id": obj.id})
+        return (
+            request.build_absolute_uri(path)
+            if request
+            else f"{settings.BASE_URL}{path}"
+        )
 
     def get_is_own_message(self, obj):
         request = self.context.get("request")
@@ -99,6 +112,8 @@ class MessageCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "Reply-to message must belong to same room."
             )
+        if reply_to and reply_to.is_deleted:
+            raise serializers.ValidationError("Cannot reply to a deleted message.")
 
         if message_type == "text":
             if not content or not content.strip():

@@ -3,12 +3,24 @@ Production settings for chat_project.
 """
 
 import os
+from datetime import timedelta
+from django.core.exceptions import ImproperlyConfigured
 from .base import *
 
 DEBUG = False
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
+if not SECRET_KEY:
+    raise ImproperlyConfigured("DJANGO_SECRET_KEY must be set in production.")
 
-ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "").split(",")
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.environ.get("ALLOWED_HOSTS", "").split(",")
+    if host.strip()
+]
+if not ALLOWED_HOSTS:
+    raise ImproperlyConfigured(
+        "ALLOWED_HOSTS must contain at least one host in production."
+    )
 
 # Security settings
 SECURE_BROWSER_XSS_FILTER = True
@@ -24,11 +36,31 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # CORS settings
 CORS_ALLOWED_ORIGINS = [
-    origin for origin in os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",") if origin
+    origin.strip()
+    for origin in os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()
 ]
+if not CORS_ALLOWED_ORIGINS:
+    raise ImproperlyConfigured(
+        "CORS_ALLOWED_ORIGINS must contain at least one origin in production."
+    )
 CORS_ALLOW_CREDENTIALS = True
 
+# Query-string WebSocket tokens have a shorter production lifetime. Clients
+# refresh through the existing REST refresh endpoint.
+JWT_SIGNING_KEY = os.environ.get("JWT_SIGNING_KEY")
+if not JWT_SIGNING_KEY:
+    raise ImproperlyConfigured("JWT_SIGNING_KEY must be set in production.")
+
+SIMPLE_JWT["SIGNING_KEY"] = JWT_SIGNING_KEY
+SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"] = timedelta(
+    minutes=int(os.environ.get("ACCESS_TOKEN_MINUTES", "15"))
+)
+
 # Database - PostgreSQL for production
+if not os.environ.get("DB_PASSWORD"):
+    raise ImproperlyConfigured("DB_PASSWORD must be set in production.")
+
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
@@ -45,11 +77,18 @@ DATABASES = {
 }
 
 # Redis Channel Layer
+REDIS_URL = os.environ.get("REDIS_URL")
+REDIS_CACHE_URL = os.environ.get("REDIS_CACHE_URL")
+if not REDIS_URL or not REDIS_CACHE_URL:
+    raise ImproperlyConfigured(
+        "REDIS_URL and REDIS_CACHE_URL must be set in production."
+    )
+
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [(os.environ.get("REDIS_HOST", "redis"), 6379)],
+            "hosts": [REDIS_URL],
             "capacity": 1500,
             "expiry": 10,
         },
@@ -60,16 +99,9 @@ CHANNEL_LAYERS = {
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.redis.RedisCache",
-        "LOCATION": f"redis://{os.environ.get('REDIS_HOST', 'redis')}:6379/1",
+        "LOCATION": REDIS_CACHE_URL,
     }
 }
 
 # Logging for production
-LOGGING["handlers"]["file"] = {
-    "class": "logging.handlers.RotatingFileHandler",
-    "filename": "/var/log/chat/django.log",
-    "maxBytes": 10485760,  # 10MB
-    "backupCount": 10,
-    "formatter": "verbose",
-}
-LOGGING["root"]["handlers"] = ["console", "file"]
+LOGGING["root"]["handlers"] = ["console"]

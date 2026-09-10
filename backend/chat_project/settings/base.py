@@ -34,6 +34,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
+    "chat_project.middleware.RequestIDMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -96,11 +97,25 @@ USE_TZ = True
 # Static files
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"
+    },
+}
 
 # Media files
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+# Redis-backed cache is part of the normal runtime so /healthz exercises the
+# same dependency in development and production. Tests override this locally.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": os.environ.get("REDIS_CACHE_URL", "redis://localhost:6379/1"),
+    }
+}
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
@@ -121,6 +136,8 @@ REST_FRAMEWORK = {
         "anon": "100/hour",
         "user": "1000/hour",
         "delete_account": "10/hour",
+        "login": os.environ.get("LOGIN_THROTTLE_RATE", "10/minute"),
+        "register": os.environ.get("REGISTER_THROTTLE_RATE", "5/hour"),
     },
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",
@@ -135,6 +152,9 @@ SIMPLE_JWT = {
     "BLACKLIST_AFTER_ROTATION": True,
     "UPDATE_LAST_LOGIN": True,
     "ALGORITHM": "HS256",
+    "SIGNING_KEY": os.environ.get(
+        "JWT_SIGNING_KEY", os.environ.get("DJANGO_SECRET_KEY", "dev-only-signing-key")
+    ),
     "AUTH_HEADER_TYPES": ("Bearer",),
     "AUTH_HEADER_NAME": "HTTP_AUTHORIZATION",
     "USER_ID_FIELD": "id",
@@ -143,12 +163,15 @@ SIMPLE_JWT = {
     "TOKEN_TYPE_CLAIM": "token_type",
 }
 
+WS_RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get("WS_RATE_LIMIT_WINDOW_SECONDS", "10"))
+WS_RATE_LIMIT_MESSAGES = int(os.environ.get("WS_RATE_LIMIT_MESSAGES", "30"))
+
 # Channel Layers Configuration
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [(os.environ.get("REDIS_HOST", "localhost"), 6379)],
+            "hosts": [os.environ.get("REDIS_URL", "redis://localhost:6379/0")],
             "capacity": 1500,
             "expiry": 10,
         },
@@ -156,12 +179,13 @@ CHANNEL_LAYERS = {
 }
 
 # Logging Configuration
-LOG_DIR = BASE_DIR / "logs"
-LOG_DIR.mkdir(exist_ok=True)
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
     "formatters": {
+        "json": {
+            "()": "chat_project.logging.JsonFormatter",
+        },
         "verbose": {
             "format": "{levelname} {asctime} {module} {process:d} {thread:d} {message}",
             "style": "{",
@@ -174,12 +198,7 @@ LOGGING = {
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
-            "formatter": "simple",
-        },
-        "file": {
-            "class": "logging.FileHandler",
-            "filename": os.path.join(BASE_DIR, "logs", "django.log"),
-            "formatter": "verbose",
+            "formatter": "json",
         },
     },
     "root": {

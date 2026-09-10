@@ -1,13 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { wsService } from '../../services/websocket';
-import { Send, Paperclip, Smile, X, FileText } from 'lucide-react';
+import { Send, Paperclip, X, FileText } from 'lucide-react';
 import clsx from 'clsx';
 
 export function MessageInput({ roomId, replyTo, onCancelReply }) {
   const [message, setMessage] = useState('');
   const [file, setFile] = useState(null);
   const [filePreview, setFilePreview] = useState(null);
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -183,14 +182,6 @@ export function MessageInput({ roomId, replyTo, onCancelReply }) {
             title="Attach file"
           >
             <Paperclip className="w-5 h-5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowEmojiPicker((prev) => !prev)}
-            className="p-2 rounded-full hover:bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] transition-colors"
-            title="Choose emoji"
-          >
-            <Smile className="w-5 h-5" />
           </button>
         </div>
 

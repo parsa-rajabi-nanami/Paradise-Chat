@@ -32,7 +32,7 @@ export function ChatSettings() {
       setDescription(room.description || "");
       setPreviewAvatar(room.display_avatar || null);
     }
-  }, [room?.id]);
+  }, [room]);
   
   useEffect(() => {
     return () => {
@@ -75,7 +75,7 @@ export function ChatSettings() {
       clearTimeout(delay);
       controller.abort();
     };
-  }, [searchQuery, room?.id]);
+  }, [searchQuery, room]);
 
   const handleAvatarChange = (e) => {
     const file = e.target.files?.[0];

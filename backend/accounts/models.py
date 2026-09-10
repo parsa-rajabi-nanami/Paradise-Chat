@@ -7,7 +7,15 @@ from django.contrib.auth.hashers import make_password, check_password
 from django.db import models
 from django.utils import timezone
 from django.conf import settings
+import os
+import uuid
 from .validators import validate_avatar
+
+
+def avatar_upload_to(instance, filename):
+    """Generate an opaque avatar filename; never persist a client filename."""
+    extension = os.path.splitext(filename)[1].lower()
+    return f"avatars/{uuid.uuid4().hex}{extension}"
 
 
 class UserManager(BaseUserManager):
@@ -54,7 +62,7 @@ class User(AbstractUser):
     username = models.CharField(max_length=50, unique=True, db_index=True)
     display_name = models.CharField(max_length=100, blank=True)
     avatar = models.ImageField(
-        upload_to="avatars/",
+        upload_to=avatar_upload_to,
         null=True,
         blank=True,
         validators=[validate_avatar],

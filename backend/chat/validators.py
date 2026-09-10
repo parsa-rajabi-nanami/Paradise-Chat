@@ -1,7 +1,42 @@
 import os
+
 import magic
 
 from django.core.exceptions import ValidationError
+
+
+MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024
+ALLOWED_ATTACHMENT_TYPES = {
+    "jpg": {"image/jpeg"},
+    "jpeg": {"image/jpeg"},
+    "png": {"image/png"},
+    "webp": {"image/webp"},
+    "pdf": {"application/pdf"},
+    "txt": {"text/plain"},
+    "doc": {"application/msword"},
+    "docx": {"application/vnd.openxmlformats-officedocument.wordprocessingml.document"},
+    "xls": {"application/vnd.ms-excel"},
+    "xlsx": {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},
+    "zip": {"application/zip", "application/x-zip-compressed"},
+}
+FORBIDDEN_EXTENSIONS = {
+    "bat",
+    "cmd",
+    "com",
+    "dll",
+    "exe",
+    "htm",
+    "html",
+    "ini",
+    "js",
+    "mjs",
+    "php",
+    "py",
+    "rb",
+    "sh",
+    "svg",
+    "wasm",
+}
 
 
 def validate_attachment(file):
@@ -12,48 +47,12 @@ def validate_attachment(file):
     if not file:
         return file
 
-    max_size = 10 * 1024 * 1024  # 10MB
-
-    allowed_extensions = {
-        # Images
-        "jpg",
-        "jpeg",
-        "png",
-        "webp",
-        # Documents
-        "pdf",
-        "txt",
-        "doc",
-        "docx",
-        # Spreadsheets
-        "xls",
-        "xlsx",
-        # Archives
-        "zip",
-    }
-
-    allowed_mime_types = {
-        # Images
-        "image/jpeg",
-        "image/png",
-        "image/webp",
-        # Documents
-        "application/pdf",
-        "text/plain",
-        "application/msword",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        # Excel
-        "application/vnd.ms-excel",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        # Zip
-        "application/zip",
-    }
-
-    if file.size > max_size:
+    if file.size > MAX_ATTACHMENT_SIZE:
         raise ValidationError("File size must not exceed 10MB.")
 
-    ext = os.path.splitext(file.name)[1].lower().replace(".", "")
-    if ext not in allowed_extensions:
+    filename = os.path.basename(file.name or "")
+    ext = os.path.splitext(filename)[1].lower().lstrip(".")
+    if ext in FORBIDDEN_EXTENSIONS or ext not in ALLOWED_ATTACHMENT_TYPES:
         raise ValidationError("This file type is not allowed.")
 
     # Validate the actual MIME type
@@ -64,10 +63,12 @@ def validate_attachment(file):
             mime=True,
         )
         file.seek(0)
-        if detected_mime_type not in allowed_mime_types:
+        if detected_mime_type not in ALLOWED_ATTACHMENT_TYPES[ext]:
             raise ValidationError(
                 "The uploaded file content does not match an allowed file type."
             )
+    except ValidationError:
+        raise
     except Exception:
         raise ValidationError("Unable to verify the uploaded file type.")
 

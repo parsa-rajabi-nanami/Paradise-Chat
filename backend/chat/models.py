@@ -3,12 +3,25 @@ Models for chat functionality - rooms, messages, and participants.
 """
 
 import uuid
+import os
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
 from django.db import transaction
 from .validators import validate_attachment
 from accounts.validators import validate_avatar
+
+
+def message_attachment_upload_to(instance, filename):
+    """Generate an opaque storage name; never persist a client filename."""
+    extension = os.path.splitext(filename)[1].lower()
+    return f"message_attachments/{uuid.uuid4().hex}{extension}"
+
+
+def room_avatar_upload_to(instance, filename):
+    """Generate an opaque room-avatar filename."""
+    extension = os.path.splitext(filename)[1].lower()
+    return f"room_avatars/{uuid.uuid4().hex}{extension}"
 
 
 class ChatRoom(models.Model):
@@ -27,7 +40,7 @@ class ChatRoom(models.Model):
     room_type = models.CharField(max_length=10, choices=ROOM_TYPES, default="direct")
     description = models.TextField(max_length=500, blank=True)
     avatar = models.ImageField(
-        upload_to="room_avatars/",
+        upload_to=room_avatar_upload_to,
         null=True,
         blank=True,
         validators=[validate_avatar],
@@ -61,6 +74,7 @@ class ChatRoom(models.Model):
         indexes = [
             models.Index(fields=["room_type"]),
             models.Index(fields=["-updated_at"]),
+            models.Index(fields=["parent", "is_active"]),
         ]
 
     def __str__(self):
@@ -121,6 +135,10 @@ class RoomParticipant(models.Model):
     class Meta:
         unique_together = ["room", "user"]
         ordering = ["joined_at"]
+        indexes = [
+            models.Index(fields=["room", "last_read_at"]),
+            models.Index(fields=["room", "is_typing", "typing_started_at"]),
+        ]
 
     def __str__(self):
         return f"{self.user.username} in {self.room}"
@@ -178,7 +196,7 @@ class Message(models.Model):
         max_length=10, choices=MESSAGE_TYPES, default="text"
     )
     attachment = models.FileField(
-        upload_to="message_attachments/",
+        upload_to=message_attachment_upload_to,
         validators=[validate_attachment],
         blank=True,
         null=True,

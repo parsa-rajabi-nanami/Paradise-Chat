@@ -5,12 +5,17 @@ Handles messaging, typing indicators, and online status.
 
 import json
 import logging
+import time
+from collections import deque
+
+from django.conf import settings
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django.db.models import Q
 from .models import ChatRoom, Message, RoomParticipant
+from .serializers import MessageSerializer
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -27,6 +32,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         self.room_id = self.scope["url_route"]["kwargs"]["room_id"]
         self.room_group_name = f"chat_{self.room_id}"
         self.user = self.scope["user"]
+        self._rate_limit_events = deque()
 
         # Reject if not authenticated
         if self.user.is_anonymous:
@@ -94,6 +100,18 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
     async def receive(self, text_data):
         """Handle incoming WebSocket messages."""
+        if not self._allow_incoming_frame():
+            await self.send(
+                text_data=json.dumps(
+                    {
+                        "type": "error",
+                        "code": "rate_limited",
+                        "detail": "Too many messages.",
+                    }
+                )
+            )
+            return
+
         try:
             data = json.loads(text_data)
             message_type = data.get("type")
@@ -116,6 +134,19 @@ class ChatConsumer(AsyncWebsocketConsumer):
             logger.error("Invalid JSON received")
         except Exception as e:
             logger.error(f"Error handling message: {e}")
+
+    def _allow_incoming_frame(self):
+        """Apply a small sliding-window guard to this authenticated connection."""
+        now = time.monotonic()
+        window = float(getattr(settings, "WS_RATE_LIMIT_WINDOW_SECONDS", 10))
+        limit = int(getattr(settings, "WS_RATE_LIMIT_MESSAGES", 30))
+        cutoff = now - window
+        while self._rate_limit_events and self._rate_limit_events[0] <= cutoff:
+            self._rate_limit_events.popleft()
+        if len(self._rate_limit_events) >= limit:
+            return False
+        self._rate_limit_events.append(now)
+        return True
 
     async def handle_message(self, data):
         """Handle new text message."""
@@ -363,27 +394,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
     @database_sync_to_async
     def serialize_message(self, message):
         """Serialize message for JSON response."""
-        return {
-            "id": str(message.id),
-            "room": str(message.room_id),
-            "sender": {
-                "id": message.sender.id,
-                "username": message.sender.username,
-                "display_name": message.sender.get_display_name(),
-                "avatar": (
-                    self.build_absolute_uri(message.sender.avatar.url)
-                    if message.sender.avatar
-                    else None
-                ),
-                "is_online": message.sender.is_online,
-            },
-            "content": message.content,
-            "message_type": message.message_type,
-            "reply_to": str(message.reply_to_id) if message.reply_to_id else None,
-            "is_edited": message.is_edited,
-            "is_deleted": message.is_deleted,
-            "created_at": message.created_at.isoformat(),
-        }
+        # Keep the WS message payload fields aligned with MessageSerializer,
+        # which is also used by the REST broadcast path.
+        return MessageSerializer(message).data
 
     @database_sync_to_async
     def set_typing_status(self, is_typing):

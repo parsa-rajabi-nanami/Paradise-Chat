@@ -30,6 +30,8 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     """Custom JWT token endpoint with additional user data."""
 
     serializer_class = CustomTokenObtainPairSerializer
+    throttle_classes = [throttling.ScopedRateThrottle]
+    throttle_scope = "login"
 
 
 class RegisterView(generics.CreateAPIView):
@@ -38,6 +40,8 @@ class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     permission_classes = (AllowAny,)
     serializer_class = UserRegistrationSerializer
+    throttle_classes = [throttling.ScopedRateThrottle]
+    throttle_scope = "register"
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)

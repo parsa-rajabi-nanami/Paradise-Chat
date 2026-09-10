@@ -17,14 +17,21 @@ pip install -r requirements.txt
 python manage.py migrate
 python manage.py runserver          # serves both HTTP and WebSockets via Daphne (ASGI)
 python manage.py createsuperuser
+python -m pytest                    # uses the configured test settings
 black .                             # format
 flake8                             # lint
 ```
 
-- **Redis must be running** (`127.0.0.1:6379`) even in development — the Channels layer uses
-  `RedisChannelLayer`, so WebSockets fail without it.
-- `pytest`, `pytest-django`, and `pytest-asyncio` are installed, but there are currently **no tests
-  and no pytest config**. Running `pytest` requires setting `DJANGO_SETTINGS_MODULE=chat_project.settings`.
+- **PostgreSQL and Redis must be running** in development (the supplied
+  `docker-compose.yml` starts both). Development now uses the same engines as
+  production; set `DEV_USE_SQLITE=1` only for a deliberate fallback.
+- `pytest.ini` selects `chat_project.settings`; `DJANGO_ENV=test` uses isolated
+  SQLite/in-memory Channels settings. Tests cover auth, permissions,
+  soft-delete, upload cleanup, REST/WS event parity, and
+  `WebsocketCommunicator` consumer flows.
+- The production-like stack is started with `docker compose up --build`; Nginx
+  proxies `/api/`, `/ws/`, and `/healthz`, while `/media/` remains private and
+  attachments use the authenticated stream endpoint.
 
 ### Frontend (run from `frontend/`)
 
@@ -36,18 +43,22 @@ npm run lint       # eslint, fails on any warning (--max-warnings 0)
 ```
 
 - `@` is aliased to `frontend/src` (see `vite.config.js`).
-- Frontend env vars (`.env`): `VITE_API_URL`, and `VITE_WS_HOST` — the WebSocket host is configured
-  **separately** from the API URL.
+- Frontend env vars (`.env`): `VITE_API_URL`, `VITE_WS_HOST`, and `VITE_SITE_URL` — the WebSocket
+  host is configured **separately** from the API URL.
 
 ## Settings & environment
 
 `chat_project/settings/` is a package, not a module. `__init__.py` dispatches on the `DJANGO_ENV`
-environment variable: `production` loads `production.py` (and requires `DJANGO_SECRET_KEY`), anything
-else loads `development.py`. Both inherit `base.py`.
+environment variable: `production` loads `production.py` (and requires `DJANGO_SECRET_KEY`,
+`JWT_SIGNING_KEY`, `DB_PASSWORD`, `REDIS_URL`, and `REDIS_CACHE_URL`), anything else loads
+`development.py`. Both inherit `base.py`.
 
-- **Development**: SQLite (`db.sqlite3`), a hardcoded insecure secret key, CORS open to all, throttling
-  disabled. Despite the README listing PostgreSQL, dev actually runs on SQLite.
-- **Production**: PostgreSQL, Redis cache, full security headers/HSTS/SSL redirect.
+- **Development**: PostgreSQL and Redis by default, CORS open to all for local
+  use, and the same DRF throttling classes as production. SQLite is an explicit
+  fallback only.
+- **Production**: PostgreSQL, separate Redis database URLs for Channels/cache,
+  full security headers/HSTS/SSL redirect, explicit host/CORS allow-lists, and
+  a 15-minute default access JWT lifetime.
 - `base.py` reads config from `os.environ` directly (no `.env` autoloading is wired in), so env vars
   must be present in the process environment for production.
 
@@ -77,7 +88,8 @@ There are **two WebSocket endpoints** (`chat/routing.py`):
 
 **WebSocket auth**: JWT is passed in the query string (`?token=<access>`), not a header, because
 browsers can't set headers on WS handshakes. `chat/middleware.py::JWTAuthMiddleware` validates it and
-sets `scope["user"]`; the ASGI stack wires this in `chat_project/asgi.py`.
+sets `scope["user"]`; the ASGI stack wires this in `chat_project/asgi.py`. Production bounds the token
+lifetime and Nginx excludes query strings from access logs; see `SECURITY.md` for the trade-off.
 
 ### Data model (`chat/models.py`, `accounts/models.py`)
 

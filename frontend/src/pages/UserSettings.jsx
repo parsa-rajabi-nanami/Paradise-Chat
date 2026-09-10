@@ -37,7 +37,7 @@ export function UserSettings() {
       setEmailNotifications(user.email_notifications ?? true);
       setPushNotifications(user.push_notifications ?? true);
     }
-  }, [user]);
+  }, [user, avatar]);
 
   // Clean up object URLs to prevent memory leaks
   useEffect(() => {

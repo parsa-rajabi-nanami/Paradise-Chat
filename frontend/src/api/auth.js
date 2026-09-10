@@ -28,6 +28,8 @@ export const authApi = {
         });
       }
     } catch {
+      // Logout is best effort; the local auth store is cleared by the caller.
+      return undefined;
     }
   },
 

@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { chatApi } from '../api/chat';
 import { wsService } from '../services/websocket';
 
-export const useChatStore = create((set, get) => ({
+export const useChatStore = create((set) => ({
   rooms: [],
   activeRoom: null,
   messages: {},
@@ -74,7 +74,8 @@ export const useChatStore = create((set, get) => ({
     await chatApi.leaveRoom(roomId);
 
     set((state) => {
-      const { [roomId]: _, ...remainingMessages } = state.messages;
+      const remainingMessages = { ...state.messages };
+      delete remainingMessages[roomId];
 
       return {
         rooms: state.rooms.filter((r) => r.id !== roomId),
