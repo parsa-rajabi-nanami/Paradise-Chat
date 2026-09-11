@@ -4,7 +4,6 @@ import magic
 
 from django.core.exceptions import ValidationError
 
-
 MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024
 ALLOWED_ATTACHMENT_TYPES = {
     "jpg": {"image/jpeg"},

@@ -13,8 +13,8 @@ jobs:
     env:
       DJANGO_ENV: test
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt pip-audit
@@ -29,8 +29,8 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: "20"
           cache: npm
@@ -43,7 +43,7 @@ jobs:
   images:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: docker/setup-buildx-action@v3
       - run: docker build -f backend/Dockerfile .
       - run: docker build -f frontend/Dockerfile --build-arg VITE_API_URL=http://localhost/api --build-arg VITE_WS_HOST=localhost --build-arg VITE_SITE_URL=http://localhost .

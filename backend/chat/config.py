@@ -2,7 +2,6 @@
 
 from .models import ChatConfiguration
 
-
 DEFAULT_MAX_MESSAGE_LENGTH = 5000
 DEFAULT_MAX_ATTACHMENT_SIZE_MB = 10
 
