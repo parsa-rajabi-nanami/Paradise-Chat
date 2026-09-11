@@ -2,7 +2,6 @@
 
 import uuid
 
-
 MAX_REQUEST_ID_LENGTH = 128
 
 
