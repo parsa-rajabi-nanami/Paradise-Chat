@@ -22,7 +22,7 @@ def get_user_from_token(token_key):
         access_token = AccessToken(token_key)
         user_id = access_token.get("user_id")
         if user_id:
-            return User.objects.get(id=user_id)
+            return User.objects.get(id=user_id, is_active=True, is_deleted=False)
     except (InvalidToken, TokenError, User.DoesNotExist) as e:
         logger.warning(f"WebSocket authentication failed: {e}")
     return AnonymousUser()

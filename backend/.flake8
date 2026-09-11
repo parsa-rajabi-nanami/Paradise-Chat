@@ -1,0 +1,11 @@
+[flake8]
+exclude =
+    .git,
+    __pycache__,
+    venv,
+    .venv,
+    */migrations/*
+extend-ignore = E203, E501, W503
+per-file-ignores =
+    chat_project/settings/*.py: F403, F405
+    chat_project/asgi.py: E402

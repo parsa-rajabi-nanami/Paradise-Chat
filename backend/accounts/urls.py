@@ -12,6 +12,7 @@ from .views import (
     PasswordChangeView,
     UserListView,
     UserDetailView,
+    UserAvatarView,
     OnlineUsersView,
     DeleteAccountView,
 )
@@ -29,5 +30,6 @@ urlpatterns = [
     # Users
     path("users/", UserListView.as_view(), name="user_list"),
     path("users/<int:pk>/", UserDetailView.as_view(), name="user_detail"),
+    path("users/<int:user_id>/avatar/", UserAvatarView.as_view(), name="user_avatar"),
     path("users/online/", OnlineUsersView.as_view(), name="online_users"),
 ]

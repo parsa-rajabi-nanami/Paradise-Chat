@@ -89,6 +89,7 @@
   body {
     height: 100%;
     min-height: 100vh;
+    min-height: 100dvh;
     margin: 0;
     padding: 0;
     background: var(--color-bg);
@@ -347,6 +348,15 @@
 
   .dark .btn-danger:hover {
     background: var(--color-bg);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }
 

@@ -27,18 +27,7 @@ export function ChatHeader({ room }) {
     <>
       <header className="h-16 px-4 flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] select-none">
         {/* Clickable Header Info Area */}
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={handleOpenDetails}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              handleOpenDetails();
-            }
-          }}
-          className="flex items-center space-x-3 cursor-pointer min-w-0 py-1 px-1.5 rounded-lg hover:bg-[var(--color-surface-hover)] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-        >
+        <div className="flex items-center min-w-0">
           {/* Back button (Mobile view) */}
           <button
             type="button"
@@ -52,40 +41,46 @@ export function ChatHeader({ room }) {
             <ArrowLeft className="w-5 h-5" />
           </button>
 
-          <Avatar
-            name={room?.display_name}
-            src={room?.display_avatar}
-            size="md"
-            isOnline={isDirect ? isOnline : undefined}
-          />
+          <button
+            type="button"
+            onClick={handleOpenDetails}
+            className="flex items-center space-x-3 cursor-pointer min-w-0 py-1 px-1.5 rounded-lg text-left hover:bg-[var(--color-surface-hover)] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+          >
+            <Avatar
+              name={room?.display_name}
+              src={room?.display_avatar}
+              size="md"
+              isOnline={isDirect ? isOnline : undefined}
+            />
 
-          <div className="min-w-0 flex-1">
-            <h2 className="font-semibold text-sm sm:text-base text-[var(--color-text)] truncate max-w-[160px] sm:max-w-xs md:max-w-md">
-              {room?.display_name || 'Chat'}
-            </h2>
+            <div className="min-w-0 flex-1">
+              <h2 className="font-semibold text-sm sm:text-base text-[var(--color-text)] truncate max-w-[160px] sm:max-w-xs md:max-w-md">
+                {room?.display_name || 'Chat'}
+              </h2>
 
-            <div className="text-xs text-[var(--color-text-muted)] flex items-center">
-              {isDirect ? (
-                <span
-                  className={`inline-flex items-center gap-1.5 font-medium ${
-                    isOnline ? 'text-emerald-500' : 'text-[var(--color-text-muted)]'
-                  }`}
-                >
+              <div className="text-xs text-[var(--color-text-muted)] flex items-center">
+                {isDirect ? (
                   <span
-                    className={`w-1.5 h-1.5 rounded-full ${
-                      isOnline ? 'bg-emerald-500' : 'bg-gray-400'
+                    className={`inline-flex items-center gap-1.5 font-medium ${
+                      isOnline ? 'text-emerald-500' : 'text-[var(--color-text-muted)]'
                     }`}
-                  />
-                  {isOnline ? 'Online' : 'Offline'}
-                </span>
-              ) : (
-                <span className="flex items-center">
-                  <Users className="w-3 h-3 mr-1" />
-                  {participantCount} {participantCount === 1 ? 'member' : 'members'}
-                </span>
-              )}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        isOnline ? 'bg-emerald-500' : 'bg-gray-400'
+                      }`}
+                    />
+                    {isOnline ? 'Online' : 'Offline'}
+                  </span>
+                ) : (
+                  <span className="flex items-center">
+                    <Users className="w-3 h-3 mr-1" />
+                    {participantCount} {participantCount === 1 ? 'member' : 'members'}
+                  </span>
+                )}
+              </div>
             </div>
-          </div>
+          </button>
         </div>
 
         {/* Action Controls */}

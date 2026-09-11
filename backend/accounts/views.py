@@ -12,6 +12,9 @@ from rest_framework_simplejwt.exceptions import TokenError
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django.db import transaction
+from django.http import FileResponse
+import mimetypes
+from django.shortcuts import get_object_or_404
 from .serializers import (
     CustomTokenObtainPairSerializer,
     UserRegistrationSerializer,
@@ -22,6 +25,8 @@ from .serializers import (
     UserDeleteSerializer,
 )
 from chat.models import ChatRoom, Message, RoomParticipant
+from .models import UserPresence
+from chat.config import get_chat_configuration
 
 User = get_user_model()
 
@@ -44,6 +49,11 @@ class RegisterView(generics.CreateAPIView):
     throttle_scope = "register"
 
     def create(self, request, *args, **kwargs):
+        if not get_chat_configuration().registration_enabled:
+            return Response(
+                {"detail": "Registration is currently disabled."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
@@ -76,6 +86,7 @@ class LogoutView(APIView):
                 token.blacklist()
 
             # Set user offline
+            UserPresence.objects.filter(user=request.user).delete()
             request.user.set_offline()
 
             return Response(
@@ -132,7 +143,7 @@ class UserListView(generics.ListAPIView):
     permission_classes = (IsAuthenticated,)
 
     def get_queryset(self):
-        queryset = User.objects.filter(is_deleted=False).exclude(
+        queryset = User.objects.filter(is_active=True, is_deleted=False).exclude(
             id=self.request.user.id
         )
         search = self.request.query_params.get("search", "")
@@ -144,9 +155,30 @@ class UserListView(generics.ListAPIView):
 class UserDetailView(generics.RetrieveAPIView):
     """Get a specific user's public profile."""
 
-    serializer_class = UserSerializer
+    serializer_class = UserMinimalSerializer
     permission_classes = (IsAuthenticated,)
-    queryset = User.objects.filter(is_deleted=False)
+    queryset = User.objects.filter(is_active=True, is_deleted=False)
+
+
+class UserAvatarView(APIView):
+    """Stream an avatar without exposing the media directory."""
+
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request, user_id):
+        user = get_object_or_404(
+            User.objects.filter(is_active=True, is_deleted=False), id=user_id
+        )
+        if not user.avatar:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        user.avatar.open("rb")
+        response = FileResponse(
+            user.avatar,
+            content_type=mimetypes.guess_type(user.avatar.name)[0],
+        )
+        response["Content-Disposition"] = "inline"
+        response["X-Content-Type-Options"] = "nosniff"
+        return response
 
 
 class OnlineUsersView(APIView):
@@ -155,7 +187,9 @@ class OnlineUsersView(APIView):
     permission_classes = (IsAuthenticated,)
 
     def get(self, request):
-        online_users = User.objects.filter(is_online=True).exclude(id=request.user.id)
+        online_users = User.objects.filter(
+            is_active=True, is_deleted=False, is_online=True
+        ).exclude(id=request.user.id)
         serializer = UserMinimalSerializer(
             online_users, many=True, context={"request": request}
         )
@@ -198,12 +232,24 @@ class DeleteAccountView(APIView):
         if hasattr(user, "set_offline"):
             user.set_offline()
 
-        Message.objects.filter(sender=user).delete()
+        # Preserve conversation history while removing the deleted user's
+        # identity. Attachments are private user-owned data and are removed.
+        sent_messages = Message.objects.filter(sender=user).only(
+            "id", "sender_id", "attachment"
+        )
+        for message in sent_messages.iterator():
+            if message.attachment:
+                message.attachment.delete(save=False)
+            Message.objects.filter(pk=message.pk).update(
+                sender=None,
+                attachment=None,
+            )
 
         direct_rooms = ChatRoom.objects.filter(room_type="direct", participants=user)
         for room in direct_rooms:
-            room.messages.all().delete()
-            room.delete()
+            RoomParticipant.objects.filter(room=room, user=user).delete()
+            if not room.room_participants.exists():
+                room.delete()
 
         group_rooms = ChatRoom.objects.filter(
             room_type__in=["group", "subgroup"], participants=user
@@ -214,13 +260,14 @@ class DeleteAccountView(APIView):
             if not is_user_owner:
                 RoomParticipant.objects.filter(room=room, user=user).delete()
                 continue
+            RoomParticipant.objects.filter(room=room, user=user).delete()
             if owners.count() == 1:
-                room.messages.all().delete()
-                if room.avatar:
-                    room.avatar.delete(save=False)
-                room.delete()
-            else:
-                RoomParticipant.objects.filter(room=room, user=user).delete()
+                replacement = room.room_participants.order_by("joined_at").first()
+                if replacement:
+                    replacement.role = "owner"
+                    replacement.save(update_fields=["role"])
+                else:
+                    room.delete()
 
         RoomParticipant.objects.filter(user=user).delete()
 

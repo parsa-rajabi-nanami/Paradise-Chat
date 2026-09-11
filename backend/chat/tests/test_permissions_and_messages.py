@@ -102,3 +102,70 @@ def test_message_lifecycle_excludes_soft_deleted_and_cleans_attachment(
     assert soft_deleted.content == "This message has been deleted"
     listed = client.get(f"/api/chat/rooms/{room.id}/messages/")
     assert all(item["id"] != fresh_id for item in listed.json()["results"])
+
+
+def test_user_cannot_read_or_modify_another_users_room(
+    user_factory, room_factory, jwt_for
+):
+    owner = user_factory("private_owner")
+    outsider = user_factory("private_outsider")
+    room = room_factory(owner=owner)
+    owner_client = authenticated_client(owner, jwt_for)
+    outsider_client = authenticated_client(outsider, jwt_for)
+
+    created = owner_client.post(
+        f"/api/chat/rooms/{room.id}/messages/",
+        {"content": "private", "message_type": "text"},
+        format="multipart",
+    )
+    assert created.status_code == 201
+    message_id = created.json()["id"]
+
+    assert outsider_client.get(f"/api/chat/rooms/{room.id}/").status_code == 404
+    assert outsider_client.get(f"/api/chat/rooms/{room.id}/messages/").status_code == 404
+    assert (
+        outsider_client.patch(
+            f"/api/chat/rooms/{room.id}/messages/{message_id}/",
+            {"content": "stolen"},
+            format="json",
+        ).status_code
+        == 404
+    )
+
+
+def test_member_cannot_change_room_security_state(user_factory, room_factory, jwt_for):
+    owner = user_factory("settings_owner")
+    member = user_factory("settings_member")
+    room = room_factory(owner=owner, members=[member])
+    client = authenticated_client(member, jwt_for)
+
+    response = client.patch(
+        f"/api/chat/rooms/{room.id}/",
+        {"name": "stolen settings", "is_active": False},
+        format="json",
+    )
+    assert response.status_code == 403
+    room.refresh_from_db()
+    assert room.name == "Test room"
+    assert room.is_active is True
+
+
+def test_room_list_summary_is_ordered_and_scoped(user_factory, room_factory, jwt_for):
+    owner = user_factory("summary_owner")
+    member = user_factory("summary_member")
+    room = room_factory(owner=owner, members=[member])
+    owner_client = authenticated_client(owner, jwt_for)
+    member_client = authenticated_client(member, jwt_for)
+
+    created = owner_client.post(
+        f"/api/chat/rooms/{room.id}/messages/",
+        {"content": "latest message", "message_type": "text"},
+        format="multipart",
+    )
+    assert created.status_code == 201
+
+    owner_room = owner_client.get("/api/chat/rooms/").json()["results"][0]
+    member_room = member_client.get("/api/chat/rooms/").json()["results"][0]
+    assert owner_room["last_message"]["content"] == "latest message"
+    assert owner_room["unread_count"] == 0
+    assert member_room["unread_count"] == 1

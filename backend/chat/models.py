@@ -272,3 +272,27 @@ class MessageRead(models.Model):
 
     def __str__(self):
         return f"{self.user.username} read {self.message.id}"
+
+
+class ChatConfiguration(models.Model):
+    """Runtime chat and branding controls managed from Django Admin."""
+
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    site_name = models.CharField(max_length=100, default="Paradise Chat")
+    site_description = models.CharField(max_length=255, blank=True)
+    registration_enabled = models.BooleanField(default=True)
+    file_uploads_enabled = models.BooleanField(default=True)
+    moderation_enabled = models.BooleanField(default=False)
+    maintenance_mode = models.BooleanField(default=False)
+    max_message_length = models.PositiveIntegerField(default=5000)
+    max_attachment_size_mb = models.PositiveIntegerField(default=10)
+    primary_color = models.CharField(max_length=20, default="#0A2342")
+    accent_color = models.CharField(max_length=20, default="#2CA58D")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Chat configuration"
+        verbose_name_plural = "Chat configuration"
+
+    def __str__(self):
+        return self.site_name

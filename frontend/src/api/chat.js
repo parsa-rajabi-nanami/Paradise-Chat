@@ -73,6 +73,15 @@ export const chatApi = {
     return response.data;
   },
 
+  sendAttachment: async (roomId, content, file, replyTo = null) => {
+    const formData = new FormData();
+    formData.append('content', content || '');
+    formData.append('attachment', file);
+    if (replyTo) formData.append('reply_to', replyTo);
+    const response = await apiClient.post(`/chat/rooms/${roomId}/messages/`, formData);
+    return response.data;
+  },
+
   editMessage: async (roomId, messageId, content) => {
     const response = await apiClient.patch(`/chat/rooms/${roomId}/messages/${messageId}/`, {
       content

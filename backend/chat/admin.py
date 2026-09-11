@@ -3,7 +3,28 @@ Admin configuration for chat app.
 """
 
 from django.contrib import admin
-from .models import ChatRoom, RoomParticipant, Message, MessageRead
+from .models import ChatConfiguration, ChatRoom, RoomParticipant, Message, MessageRead
+
+
+@admin.register(ChatConfiguration)
+class ChatConfigurationAdmin(admin.ModelAdmin):
+    """Expose runtime controls without allowing duplicate configuration rows."""
+
+    list_display = (
+        "site_name",
+        "registration_enabled",
+        "file_uploads_enabled",
+        "moderation_enabled",
+        "maintenance_mode",
+        "updated_at",
+    )
+    readonly_fields = ("updated_at",)
+
+    def has_add_permission(self, request):
+        return not ChatConfiguration.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 class RoomParticipantInline(admin.TabularInline):

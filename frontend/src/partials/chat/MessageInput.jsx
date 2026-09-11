@@ -2,11 +2,13 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { wsService } from '../../services/websocket';
 import { Send, Paperclip, X, FileText } from 'lucide-react';
 import clsx from 'clsx';
+import toast from 'react-hot-toast';
 
 export function MessageInput({ roomId, replyTo, onCancelReply }) {
   const [message, setMessage] = useState('');
   const [file, setFile] = useState(null);
   const [filePreview, setFilePreview] = useState(null);
+  const [isSending, setIsSending] = useState(false);
 
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -79,18 +81,26 @@ export function MessageInput({ roomId, replyTo, onCancelReply }) {
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e?.preventDefault();
     const trimmed = message.trim();
 
     if (!trimmed && !file) return;
 
-    wsService.sendMessage({
-      room: roomId,
-      content: trimmed,
-      file,
-      replyTo: replyTo?.id,
-    });
+    setIsSending(true);
+    try {
+      await wsService.sendMessage({
+        room: roomId,
+        content: trimmed,
+        file,
+        replyTo: replyTo?.id,
+      });
+    } catch (error) {
+      toast.error(error?.message || 'Message could not be sent.');
+      return;
+    } finally {
+      setIsSending(false);
+    }
 
     // Reset input state
     setMessage('');
@@ -110,7 +120,7 @@ export function MessageInput({ roomId, replyTo, onCancelReply }) {
   };
 
   return (
-    <div className="border-t border-[var(--color-border)] bg-[var(--color-surface)] p-2 md:p-3 relative">
+    <div className="border-t border-[var(--color-border)] bg-[var(--color-surface)] p-2 md:p-3 pb-[calc(0.5rem+env(safe-area-inset-bottom))] md:pb-3 relative">
       {/* Reply Preview Bar */}
       {replyTo && (
         <div className="mb-2 flex items-center justify-between px-3 py-2 bg-[var(--color-bg)] rounded-lg border-l-4 border-[var(--color-primary)] shadow-sm">
@@ -156,6 +166,7 @@ export function MessageInput({ roomId, replyTo, onCancelReply }) {
           <button
             type="button"
             onClick={handleRemoveFile}
+            aria-label="Remove attachment"
             className="p-1 rounded-full bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] shadow-sm transition-colors"
           >
             <X className="w-3.5 h-3.5" />
@@ -171,6 +182,7 @@ export function MessageInput({ roomId, replyTo, onCancelReply }) {
           ref={fileInputRef}
           className="hidden"
           onChange={(e) => setFile(e.target.files[0] || null)}
+          accept="image/jpeg,image/png,image/webp,application/pdf,text/plain,.doc,.docx,.xls,.xlsx,.zip"
         />
 
         {/* Action Controls Left */}
@@ -205,7 +217,7 @@ export function MessageInput({ roomId, replyTo, onCancelReply }) {
         {/* Send Button */}
         <button
           type="submit"
-          disabled={!message.trim() && !file}
+          disabled={isSending || (!message.trim() && !file)}
           className={clsx(
             'p-2.5 rounded-full transition-all flex items-center justify-center shrink-0 mb-0.5',
             message.trim() || file

@@ -11,6 +11,7 @@ from django.urls import re_path
 from rest_framework.test import APIClient
 
 from chat.consumers import ChatConsumer, OnlineStatusConsumer
+from chat.models import Message
 
 os.environ["DJANGO_ALLOW_ASYNC_UNSAFE"] = "true"
 
@@ -171,6 +172,24 @@ def test_online_status_heartbeat(presence_user):
     async_to_sync(_online_status_heartbeat)(presence_user)
 
 
+def test_presence_stays_online_until_last_connection_closes(presence_user):
+    async def open_and_close_connections():
+        first = CommunicatorOnlineStatusConsumer()
+        first.user = presence_user
+        second = CommunicatorOnlineStatusConsumer()
+        second.user = presence_user
+
+        await first.set_online_status(True)
+        await second.set_online_status(True)
+        await first.set_online_status(False)
+        assert get_user_model().objects.get(id=presence_user.id).is_online is True
+
+        await second.set_online_status(False)
+        assert get_user_model().objects.get(id=presence_user.id).is_online is False
+
+    async_to_sync(open_and_close_connections)()
+
+
 class RecordingLayer:
     def __init__(self):
         self.events = []
@@ -208,3 +227,24 @@ def test_rest_and_ws_message_broadcast_shapes_match(parity_room, monkeypatch):
     assert response.status_code == 201
     rest_event = rest_layer.events[-1][1]
     async_to_sync(_ws_message_for_parity)(user, room, rest_event)
+
+
+def test_websocket_edit_and_delete_are_bound_to_connected_room(user_factory, room_factory):
+    user = user_factory("room_bound_user")
+    first_room = room_factory(owner=user)
+    second_room = room_factory(owner=user)
+    message = Message.objects.create(
+        room=first_room, sender=user, content="must stay private"
+    )
+
+    async def attempt_cross_room_mutation():
+        consumer = CommunicatorChatConsumer()
+        consumer.room_id = str(second_room.id)
+        consumer.user = user
+        assert await consumer.edit_message(message.id, "changed") is None
+        assert await consumer.delete_message(message.id) is False
+
+    async_to_sync(attempt_cross_room_mutation)()
+    message.refresh_from_db()
+    assert message.content == "must stay private"
+    assert message.is_deleted is False

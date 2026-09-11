@@ -67,7 +67,7 @@ export function ChatPage() {
   };
 
   return (
-    <div className="h-screen flex bg-[var(--bg-primary)] transition-colors duration-300 overflow-hidden w-full">
+    <div className="h-[100dvh] min-h-0 flex bg-[var(--bg-primary)] transition-colors duration-300 overflow-hidden w-full">
       <div
         className={`${
           roomId ? 'hidden md:flex md:flex-col' : 'flex flex-col'

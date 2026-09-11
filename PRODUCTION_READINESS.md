@@ -9,19 +9,19 @@ environment, or architecture changes will also update `AGENTS.md` and
 
 ## Repository baseline
 
-- Backend: Django `5.0.1`, Django REST Framework `3.14.0`, Channels `4.0.0`,
-  `channels-redis 4.2.0`, Daphne `4.1.0`, SimpleJWT `5.3.1`, PostgreSQL driver
-  `psycopg2-binary 2.9.9`, Redis client `5.0.1`.
+- Backend runtime pins: Django `5.2.16`, Django REST Framework `3.18.1`,
+  Channels `4.3.2`, `channels-redis 4.3.0`, Daphne `4.2.3`, SimpleJWT `5.5.1`,
+  PostgreSQL driver `psycopg2-binary 2.9.12`, Redis client `7.3.1`.
 - Frontend: React `18.2.0`, Vite `5.0.12`, npm lockfile present; existing
   commands are `npm run lint` and `npm run build`.
 - Settings dispatch from `backend/chat_project/settings/__init__.py` to
   `development.py` or `production.py` using `DJANGO_ENV`.
-- Development currently uses SQLite, while production uses PostgreSQL. Both
-  use Redis-backed Channels configuration, but development disables DRF
-  throttling.
-- `backend/chat/validators.py` already checks a 10 MB extension/MIME allow-list,
-  but filenames are still client-controlled. `backend/chat/signals.py` removes
-  attachments through a local filesystem path and needs storage-safe cleanup.
+- Development defaults to PostgreSQL/Redis like production; SQLite is an
+  explicit test/fallback mode. Both runtime environments keep DRF throttling
+  enabled.
+- `backend/chat/validators.py` checks a 10 MB extension/MIME allow-list and
+  uploads use generated storage names. `backend/chat/signals.py` removes
+  attachments through Django's configured storage backend.
 - The REST message path is `backend/chat/views.py::MessageListView` and its
   edit/delete path is `MessageDetailView`; the corresponding WebSocket path is
   `backend/chat/consumers.py::ChatConsumer`. Their event types and payloads
@@ -30,8 +30,9 @@ environment, or architecture changes will also update `AGENTS.md` and
   events).
 - The frontend WebSocket singleton is
   `frontend/src/services/websocket.js`; file uploads intentionally use REST.
-- Existing migrations are limited to the current user and room/message schema;
-  no data-model change is required for the initial readiness work.
+- Readiness migrations add one presence row per active WebSocket connection and
+  a singleton runtime chat configuration managed from Admin. Both are additive
+  and reversible; existing message/room data is preserved.
 
 ## P0 — blockers before real traffic
 

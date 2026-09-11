@@ -20,6 +20,11 @@ export function MessageList({
   const updateMessage = useChatStore((state) => state.updateMessage);
   const deleteMessage = useChatStore((state) => state.deleteMessage);
 
+  // Reset initial mount flag before the message effect runs for a new room.
+  useEffect(() => {
+    isInitialMount.current = true;
+  }, [room?.id]);
+
   // Smart auto-scroll logic
   const scrollToBottom = useCallback((behavior = 'smooth') => {
     messagesEndRef.current?.scrollIntoView({ behavior });
@@ -39,12 +44,7 @@ export function MessageList({
     } else if (isNearBottom) {
       scrollToBottom('smooth');
     }
-  }, [messages, scrollToBottom]);
-
-  // Reset initial mount flag when room changes
-  useEffect(() => {
-    isInitialMount.current = true;
-  }, [room?.id]);
+  }, [messages, room?.id, scrollToBottom]);
 
   // Safe date formatting helper
   const formatMessageDate = (date) => {

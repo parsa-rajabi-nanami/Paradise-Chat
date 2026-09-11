@@ -1,5 +1,6 @@
 import { useAuthStore } from '../stores/authStore';
 import { useChatStore } from '../stores/chatStore';
+import { chatApi } from '../api/chat';
 
 class WebSocketService {
   socket = null;
@@ -15,8 +16,6 @@ class WebSocketService {
 
   heartbeatInterval = null;
   messageHandlers = [];
-  apiUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api';
-
   getWsUrl() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = import.meta.env.VITE_WS_HOST || window.location.host;
@@ -37,7 +36,7 @@ class WebSocketService {
       return;
     }
 
-    const url = `${this.getWsUrl()}/ws/chat/${roomId}/?token=${token}`;
+    const url = `${this.getWsUrl()}/ws/chat/${roomId}/?token=${encodeURIComponent(token)}`;
     this.socket = new WebSocket(url);
 
     this.socket.onopen = () => {
@@ -108,7 +107,7 @@ class WebSocketService {
     const token = useAuthStore.getState().tokens?.access;
     if (!token) return;
 
-    const url = `${this.getWsUrl()}/ws/status/?token=${token}`;
+    const url = `${this.getWsUrl()}/ws/status/?token=${encodeURIComponent(token)}`;
 
     this.statusSocket = new WebSocket(url);
 
@@ -139,6 +138,10 @@ class WebSocketService {
         this.statusReconnectTimeout = setTimeout(() => this.connectToStatus(), delay);
       }
     };
+
+    this.statusSocket.onerror = () => {
+      // onclose performs the reconnect; avoid noisy unhandled browser errors.
+    };
   }
 
   disconnectFromStatus() {
@@ -156,6 +159,11 @@ class WebSocketService {
     }
 
     this.statusReconnectAttempts = 0;
+  }
+
+  disconnectAll() {
+    this.disconnectFromRoom();
+    this.disconnectFromStatus();
   }
 
   startHeartbeat() {
@@ -235,31 +243,9 @@ class WebSocketService {
     }
 
     if (file) {
-      const token = useAuthStore.getState().tokens?.access;
-      const formData = new FormData();
-      const url = `${this.apiUrl}/chat/rooms/${targetRoomId}/messages/`;
-
-      formData.append('room_id', targetRoomId);
-      formData.append('content', content || '');
-      formData.append('attachment', file);
-
-      if (replyTo) {
-        formData.append('reply_to', replyTo);
-      }
-
-      const response = await fetch(url, {
-        method: 'POST',
-        body: formData,
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Upload failed (${response.status})`);
-      }
-
-      return response.json();
+      const created = await chatApi.sendAttachment(targetRoomId, content, file, replyTo);
+      useChatStore.getState().addMessage(targetRoomId, created);
+      return created;
     }
 
     if (this.socket?.readyState === WebSocket.OPEN) {

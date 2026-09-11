@@ -7,6 +7,7 @@ from django.contrib.auth.hashers import make_password, check_password
 from django.db import models
 from django.utils import timezone
 from django.conf import settings
+from django.urls import reverse
 import os
 import uuid
 from .validators import validate_avatar
@@ -128,6 +129,23 @@ class User(AbstractUser):
     def get_avatar_url(self, request=None):
         if not self.avatar:
             return None
+        path = reverse("user_avatar", kwargs={"user_id": self.id})
         if request:
-            return request.build_absolute_uri(self.avatar.url)
-        return f"{settings.BASE_URL}{self.avatar.url}"
+            return request.build_absolute_uri(path)
+        return f"{settings.BASE_URL}{path}"
+
+
+class UserPresence(models.Model):
+    """One row per active WebSocket presence connection."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="presence_connections",
+    )
+    connected_at = models.DateTimeField(auto_now_add=True)
+    last_heartbeat = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["user", "last_heartbeat"])]

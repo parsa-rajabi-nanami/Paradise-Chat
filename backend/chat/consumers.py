@@ -3,10 +3,12 @@ WebSocket consumers for real-time chat functionality.
 Handles messaging, typing indicators, and online status.
 """
 
+import asyncio
 import json
 import logging
 import time
 from collections import deque
+from datetime import timedelta
 
 from django.conf import settings
 from channels.generic.websocket import AsyncWebsocketConsumer
@@ -15,6 +17,8 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django.db.models import Q
 from .models import ChatRoom, Message, RoomParticipant
+from .config import get_chat_configuration
+from accounts.models import UserPresence
 from .serializers import MessageSerializer
 
 logger = logging.getLogger(__name__)
@@ -150,7 +154,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
     async def handle_message(self, data):
         """Handle new text message."""
-        content = data.get("content", "").strip()
+        raw_content = data.get("content", "")
+        if not isinstance(raw_content, str):
+            return
+        content = raw_content.strip()
         reply_to = data.get("reply_to")
 
         if reply_to:
@@ -177,6 +184,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
     async def handle_typing(self, data):
         """Handle typing indicator."""
         is_typing = data.get("is_typing", False)
+        if not isinstance(is_typing, bool):
+            return
 
         await self.set_typing_status(is_typing)
 
@@ -207,7 +216,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
     async def handle_edit(self, data):
         """Handle message edit."""
         message_id = data.get("message_id")
-        new_content = data.get("content", "").strip()
+        raw_content = data.get("content", "")
+        if not isinstance(raw_content, str):
+            return
+        new_content = raw_content.strip()
 
         if not message_id or not new_content:
             return
@@ -356,7 +368,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
     def is_room_participant(self):
         """Check if user is a participant in the room."""
         return RoomParticipant.objects.filter(
-            room_id=self.room_id, user=self.user
+            room_id=self.room_id,
+            user=self.user,
+            user__is_active=True,
+            user__is_deleted=False,
         ).exists()
 
     @database_sync_to_async
@@ -369,6 +384,12 @@ class ChatConsumer(AsyncWebsocketConsumer):
             )
 
             if room.parent and not room.parent.is_active:
+                return None
+
+            if not RoomParticipant.objects.filter(room=room, user=self.user).exists():
+                return None
+
+            if len(content) > get_chat_configuration().max_message_length:
                 return None
 
             message = Message.objects.create(
@@ -424,9 +445,19 @@ class ChatConsumer(AsyncWebsocketConsumer):
     def edit_message(self, message_id, new_content):
         """Edit a message and return the updated object."""
         try:
-            message = Message.objects.select_related("sender", "reply_to").get(
-                id=message_id, sender=self.user, is_deleted=False
+            message = Message.objects.select_related(
+                "sender", "reply_to", "room__parent"
+            ).get(
+                id=message_id,
+                room_id=self.room_id,
+                room__is_active=True,
+                sender=self.user,
+                is_deleted=False,
             )
+            if message.room.parent_id and not message.room.parent.is_active:
+                return None
+            if len(new_content) > get_chat_configuration().max_message_length:
+                return None
 
             message.edit(new_content)
 
@@ -445,9 +476,15 @@ class ChatConsumer(AsyncWebsocketConsumer):
     def delete_message(self, message_id):
         """Soft delete a message."""
         try:
-            message = Message.objects.get(
-                id=message_id, sender=self.user, is_deleted=False
+            message = Message.objects.select_related("room__parent").get(
+                id=message_id,
+                room_id=self.room_id,
+                room__is_active=True,
+                sender=self.user,
+                is_deleted=False,
             )
+            if message.room.parent_id and not message.room.parent.is_active:
+                return False
             message.soft_delete()
             return True
         except Message.DoesNotExist:
@@ -501,18 +538,19 @@ class OnlineStatusConsumer(AsyncWebsocketConsumer):
         """Handle WebSocket disconnection."""
         if not self.user.is_anonymous:
             # Set user offline
-            await self.set_online_status(False)
+            became_offline = await self.set_online_status(False)
 
-            # Broadcast offline status
-            await self.channel_layer.group_send(
-                self.status_group,
-                {
-                    "type": "status_update",
-                    "user_id": self.user.id,
-                    "username": self.user.username,
-                    "is_online": False,
-                },
-            )
+            # Broadcast offline only when the last tab/device disconnected.
+            if became_offline:
+                await self.channel_layer.group_send(
+                    self.status_group,
+                    {
+                        "type": "status_update",
+                        "user_id": self.user.id,
+                        "username": self.user.username,
+                        "is_online": False,
+                    },
+                )
 
             # Leave status group
             await self.channel_layer.group_discard(self.status_group, self.channel_name)
@@ -525,8 +563,15 @@ class OnlineStatusConsumer(AsyncWebsocketConsumer):
             data = json.loads(text_data)
             if data.get("type") == "heartbeat":
                 await self.send(text_data=json.dumps({"type": "heartbeat_ack"}))
+                asyncio.create_task(self._touch_presence_safely())
         except json.JSONDecodeError:
             pass
+
+    async def _touch_presence_safely(self):
+        try:
+            await self.touch_presence()
+        except Exception:
+            logger.debug("Unable to update presence heartbeat", exc_info=True)
 
     async def status_update(self, event):
         """Send status update to WebSocket."""
@@ -545,6 +590,27 @@ class OnlineStatusConsumer(AsyncWebsocketConsumer):
     def set_online_status(self, is_online):
         """Update user's online status in database."""
         if is_online:
+            UserPresence.objects.filter(
+                user=self.user,
+                last_heartbeat__lt=timezone.now() - timedelta(seconds=90),
+            ).delete()
+            presence = UserPresence.objects.create(user=self.user)
+            self.presence_id = presence.id
             self.user.set_online()
+            return True
         else:
+            if getattr(self, "presence_id", None):
+                UserPresence.objects.filter(
+                    id=self.presence_id, user=self.user
+                ).delete()
+            if UserPresence.objects.filter(user=self.user).exists():
+                return False
             self.user.set_offline()
+            return True
+
+    @database_sync_to_async
+    def touch_presence(self):
+        if getattr(self, "presence_id", None):
+            UserPresence.objects.filter(id=self.presence_id, user=self.user).update(
+                last_heartbeat=timezone.now()
+            )

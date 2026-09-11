@@ -10,6 +10,7 @@ from .views import (
     MessageListView,
     MessageDetailView,
     MessageAttachmentView,
+    RoomAvatarView,
     DirectMessageView,
     MarkAsReadView,
     TypingStatusView,
@@ -38,6 +39,11 @@ urlpatterns = [
         "messages/<uuid:message_id>/attachment/",
         MessageAttachmentView.as_view(),
         name="message_attachment",
+    ),
+    path(
+        "rooms/<uuid:room_id>/avatar/",
+        RoomAvatarView.as_view(),
+        name="room_avatar",
     ),
     # Actions
     path("direct/", DirectMessageView.as_view(), name="direct_message"),

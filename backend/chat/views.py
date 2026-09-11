@@ -11,9 +11,10 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from django.http import FileResponse
 import mimetypes
 import os
-from django.db.models import Q, Max
+from django.db.models import Count, Max, OuterRef, Q, Subquery
 from django.shortcuts import get_object_or_404
 from django.db import transaction
+from django.db import IntegrityError
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.contrib.auth import get_user_model
@@ -27,7 +28,32 @@ from .serializers import (
     MessageSerializer,
     MessageCreateSerializer,
     MessageUpdateSerializer,
+    ChatRoomUpdateSerializer,
 )
+
+
+def with_room_summaries(queryset, user):
+    """Annotate sidebar summaries so serialization does not issue N+1 queries."""
+
+    latest = Message.objects.filter(room_id=OuterRef("pk"), is_deleted=False).order_by(
+        "-created_at"
+    )
+    return queryset.annotate(
+        summary_message_id=Subquery(latest.values("id")[:1]),
+        summary_content=Subquery(latest.values("content")[:1]),
+        summary_sender=Subquery(latest.values("sender__username")[:1]),
+        summary_created_at=Subquery(latest.values("created_at")[:1]),
+        summary_message_type=Subquery(latest.values("message_type")[:1]),
+        unread_count_for_user=Count(
+            "messages",
+            filter=(
+                Q(messages__is_deleted=False)
+                & ~Q(messages__sender=user)
+                & ~Q(messages__read_by__user=user)
+            ),
+            distinct=True,
+        ),
+    )
 
 
 class ChatRoomListView(generics.ListCreateAPIView):
@@ -41,7 +67,7 @@ class ChatRoomListView(generics.ListCreateAPIView):
         return ChatRoomSerializer
 
     def get_queryset(self):
-        return (
+        return with_room_summaries(
             ChatRoom.objects.filter(
                 participants=self.request.user, is_active=True, parent__isnull=True
             )
@@ -50,20 +76,22 @@ class ChatRoomListView(generics.ListCreateAPIView):
             .prefetch_related(
                 "room_participants__user",
             )
-            .select_related("created_by")
+            .select_related("created_by"),
+            self.request.user,
         )
 
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()
 
-        visible_rooms = (
+        visible_rooms = with_room_summaries(
             ChatRoom.objects.filter(
                 participants=request.user,
                 is_active=True,
             )
             .filter(Q(parent__isnull=True) | Q(parent__is_active=True))
             .prefetch_related("room_participants__user")
-            .select_related("parent", "created_by")
+            .select_related("parent", "created_by"),
+            request.user,
         )
         children_by_parent = defaultdict(list)
         for room in visible_rooms:
@@ -102,6 +130,11 @@ class ChatRoomDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = (IsAuthenticated,)
     serializer_class = ChatRoomDetailSerializer
 
+    def get_serializer_class(self):
+        if self.request.method in ("PUT", "PATCH"):
+            return ChatRoomUpdateSerializer
+        return ChatRoomDetailSerializer
+
     def get_queryset(self):
         return (
             ChatRoom.objects.filter(participants=self.request.user, is_active=True)
@@ -128,18 +161,19 @@ class ChatRoomDetailView(generics.RetrieveUpdateDestroyAPIView):
             )
 
         if room.room_type == "direct":
-            room.delete()
+            participant.delete()
             channel_layer = get_channel_layer()
             if channel_layer:
                 async_to_sync(channel_layer.group_send)(
                     f"chat_{room.id}",
                     {
-                        "type": "room_deleted",
-                        "room_id": room.id,
+                        "type": "user_leave",
+                        "user_id": request.user.id,
+                        "username": request.user.username,
                     },
                 )
             return Response(
-                {"message": "Direct chat deleted successfully."},
+                {"message": "Direct chat left successfully."},
                 status=status.HTTP_200_OK,
             )
 
@@ -182,6 +216,17 @@ class ChatRoomDetailView(generics.RetrieveUpdateDestroyAPIView):
             )
         return Response({"message": "Left the room."}, status=status.HTTP_200_OK)
 
+    def update(self, request, *args, **kwargs):
+        room = self.get_object()
+        participant = room.room_participants.filter(user=request.user).first()
+        if not participant or participant.role not in ("owner", "admin"):
+            raise PermissionDenied(
+                "Only room owners and admins can edit room settings."
+            )
+        if room.room_type == "direct":
+            raise PermissionDenied("Direct room settings cannot be changed.")
+        return super().update(request, *args, **kwargs)
+
 
 class ManageParticipantView(APIView):
     permission_classes = [IsAuthenticated]
@@ -215,11 +260,15 @@ class ManageParticipantView(APIView):
         User = get_user_model()
 
         try:
-            user = User.objects.get(id=user_id)
+            user = User.objects.get(id=user_id, is_active=True, is_deleted=False)
         except User.DoesNotExist:
             return Response({"message": "User not found."}, status=404)
 
-        RoomParticipant.objects.create(room=room, user=user, role="member")
+        try:
+            with transaction.atomic():
+                RoomParticipant.objects.create(room=room, user=user, role="member")
+        except IntegrityError:
+            return Response({"message": "User already in room."}, status=400)
 
         channel_layer = get_channel_layer()
         if channel_layer:
@@ -398,11 +447,12 @@ class MessageDetailView(generics.RetrieveUpdateDestroyAPIView):
             Message.objects.select_related("sender", "room"),
             id=self.kwargs["message_id"],
             room_id=self.kwargs["room_id"],
+            room__is_active=True,
+            room__participants=self.request.user,
             is_deleted=False,
         )
-        # Verify user is in the room
-        if not message.room.participants.filter(id=self.request.user.id).exists():
-            raise PermissionDenied("You are not a member of this room.")
+        if message.room.parent_id and not message.room.parent.is_active:
+            raise NotFound("Room not found.")
         return message
 
     def update(self, request, *args, **kwargs):
@@ -480,10 +530,12 @@ class MessageAttachmentView(APIView):
         message = get_object_or_404(
             Message.objects.select_related("room"),
             id=message_id,
+            room__is_active=True,
+            room__participants=request.user,
             is_deleted=False,
         )
-        if not message.room.participants.filter(id=request.user.id).exists():
-            raise PermissionDenied("You are not a member of this room.")
+        if message.room.parent_id and not message.room.parent.is_active:
+            raise NotFound("Attachment not found.")
         if not message.attachment or not message.attachment.name:
             raise NotFound("This message has no attachment.")
 
@@ -493,6 +545,33 @@ class MessageAttachmentView(APIView):
         response["Content-Disposition"] = (
             f'inline; filename="{os.path.basename(message.attachment.name)}"'
         )
+        return response
+
+
+class RoomAvatarView(APIView):
+    """Stream a room avatar only to active room participants."""
+
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request, room_id):
+        room = get_object_or_404(
+            ChatRoom.objects.filter(
+                id=room_id,
+                is_active=True,
+                participants=request.user,
+            )
+        )
+        if room.parent_id and not room.parent.is_active:
+            raise NotFound("Room avatar not found.")
+        if not room.avatar:
+            raise NotFound("This room has no avatar.")
+        room.avatar.open("rb")
+        response = FileResponse(
+            room.avatar,
+            content_type=mimetypes.guess_type(room.avatar.name)[0],
+        )
+        response["Content-Disposition"] = "inline"
+        response["X-Content-Type-Options"] = "nosniff"
         return response
 
 
@@ -517,7 +596,7 @@ class DirectMessageView(APIView):
         User = get_user_model()
 
         try:
-            other_user = User.objects.get(id=user_id)
+            other_user = User.objects.get(id=user_id, is_active=True, is_deleted=False)
         except User.DoesNotExist:
             return Response(
                 {"error": "User not found"}, status=status.HTTP_404_NOT_FOUND
@@ -525,7 +604,9 @@ class DirectMessageView(APIView):
 
         # Check for existing DM
         existing_room = (
-            ChatRoom.objects.filter(room_type="direct", participants=request.user)
+            ChatRoom.objects.filter(
+                room_type="direct", participants=request.user, is_active=True
+            )
             .filter(participants=other_user)
             .first()
         )
@@ -591,6 +672,8 @@ class TypingStatusView(APIView):
             id=room_id,
         )
         is_typing = request.data.get("is_typing", False)
+        if not isinstance(is_typing, bool):
+            return Response({"error": "is_typing must be a boolean"}, status=400)
         participant = room.room_participants.filter(user=request.user).first()
         if not participant:
             return Response({"error": "Participant not found"}, status=404)

@@ -173,12 +173,17 @@ export const useChatStore = create((set) => ({
     try {
       const response = await chatApi.getMessages(roomId);
       const messages = response.results || response;
-      set((state) => ({
-        messages: {
-          ...state.messages,
-          [roomId]: Array.isArray(messages) ? [...messages].reverse() : []
-        }
-      }));
+      set((state) => {
+        const existing = state.messages[roomId] || [];
+        const merged = [...existing, ...(Array.isArray(messages) ? messages : [])];
+        const unique = Array.from(
+          new Map(merged.map((message) => [message.id, message])).values()
+        );
+        unique.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        return {
+          messages: { ...state.messages, [roomId]: unique }
+        };
+      });
     } catch (error) {
       console.error('Failed to fetch messages:', error);
     }
@@ -205,7 +210,9 @@ export const useChatStore = create((set) => ({
       return {
         messages: {
           ...state.messages,
-          [roomId]: [...roomMessages, message]
+          [roomId]: [...roomMessages, message].sort(
+            (a, b) => new Date(a.created_at) - new Date(b.created_at)
+          )
         },
         rooms: state.rooms.map(updateRoomMeta),
         activeRoom: state.activeRoom ? updateRoomMeta(state.activeRoom) : null

@@ -52,6 +52,9 @@ export const useAuthStore = create()(
             await authApi.logout(tokens.refresh);
           }
         } finally {
+          // Load lazily to avoid a module cycle between the auth and socket
+          // singletons while ensuring old-token sockets cannot reconnect.
+          import('../services/websocket').then(({ wsService }) => wsService.disconnectAll());
           set({
             user: null,
             tokens: null,
