@@ -1,4 +1,4 @@
-FROM node:20-alpine AS build
+FROM node:20.19.0-alpine AS build
 WORKDIR /app
 
 # The Vite toolchain is a devDependency, but it is required while building the
