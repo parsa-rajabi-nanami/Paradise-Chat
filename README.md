@@ -48,7 +48,7 @@ The development workflow keeps the application processes on your machine and run
    cd backend
    python -m venv venv
    source venv/bin/activate
-   pip install -r requirements.txt
+   pip install -r requirements-dev.txt
    set -a; source ../.env; set +a
    python manage.py migrate
    python manage.py createsuperuser
@@ -100,7 +100,7 @@ Run backend checks from `backend/` with the virtual environment active:
 
 ```bash
 python manage.py check
-DJANGO_ENV=test pytest
+pytest
 black --check .
 flake8
 ```

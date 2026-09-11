@@ -9,11 +9,14 @@ environment, or architecture changes will also update `AGENTS.md` and
 
 ## Repository baseline
 
-- Backend runtime pins: Django `5.2.16`, Django REST Framework `3.18.1`,
+- Backend runtime pins: Django `5.2.17`, Django REST Framework `3.18.1`,
   Channels `4.3.2`, `channels-redis 4.3.0`, Daphne `4.2.3`, SimpleJWT `5.5.1`,
   PostgreSQL driver `psycopg2-binary 2.9.12`, Redis client `7.3.1`.
-- Frontend: React `18.2.0`, Vite `5.0.12`, npm lockfile present; existing
+- Frontend: React `18.2.0`, Vite `8.3.0`, npm lockfile present; existing
   commands are `npm run lint` and `npm run build`.
+- Runtime and development Python dependencies are separated: production images
+  install `requirements.txt`; CI and local development use
+  `requirements-dev.txt`.
 - Settings dispatch from `backend/chat_project/settings/__init__.py` to
   `development.py` or `production.py` using `DJANGO_ENV`.
 - Development defaults to PostgreSQL/Redis like production; SQLite is an
@@ -38,7 +41,7 @@ environment, or architecture changes will also update `AGENTS.md` and
 
 ### 1. Test-suite bootstrap and critical coverage
 
-Add the root `pytest.ini` with `DJANGO_SETTINGS_MODULE=chat_project.settings`
+Add the root `pytest.ini` with `DJANGO_SETTINGS_MODULE=chat_project.settings.test`
 and asyncio configuration, then add focused tests under `backend/accounts/tests/`
 and `backend/chat/tests/`. Use the pinned pytest, pytest-django, and
 pytest-asyncio dependencies plus Channels `WebsocketCommunicator`.
@@ -157,7 +160,7 @@ observability/storage, human choices about providers and budget.
 
 ## Acceptance gates
 
-- `cd backend && pytest`, `black --check .`, and `flake8` pass.
+- `cd backend && pytest`, the source-only Black check, and `flake8` pass.
 - `cd frontend && npm run lint && npm run build` pass.
 - `docker compose config` succeeds and the compose health checks reach the
   backend, PostgreSQL, and Redis services.

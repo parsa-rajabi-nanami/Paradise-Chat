@@ -20,7 +20,7 @@ In `backend/`, create a virtual environment, load the root environment file, ins
 ```bash
 python -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 set -a; source ../.env; set +a
 python manage.py migrate
 python manage.py runserver
@@ -35,7 +35,7 @@ cp .env-sample .env
 npm run dev
 ```
 
-Use `DJANGO_ENV=test` for the isolated pytest settings. Set `DEV_USE_SQLITE=1` only when you need the deliberate lightweight development fallback; Redis is still required for real-time features unless the test settings are active.
+The repository's `pytest.ini` selects the isolated SQLite/in-memory test settings. Set `DEV_USE_SQLITE=1` only when you need the deliberate lightweight development fallback; Redis is still required for real-time features unless the test settings are active.
 
 ## Architecture rules
 
@@ -66,7 +66,8 @@ Run backend checks from `backend/`:
 
 ```bash
 python -m pytest
-black --check .
+black --check conftest.py manage.py
+find accounts chat chat_project -name '*.py' -exec black --check {} \;
 flake8
 ```
 

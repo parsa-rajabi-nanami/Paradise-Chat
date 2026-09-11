@@ -8,16 +8,14 @@ ENV NODE_ENV=development
 ARG VITE_API_URL=http://localhost/api
 ARG VITE_WS_HOST=localhost
 ARG VITE_SITE_URL=http://localhost
-ARG NPM_REGISTRY=https://registry.npmjs.org
 ENV VITE_API_URL=$VITE_API_URL \
     VITE_WS_HOST=$VITE_WS_HOST \
     VITE_SITE_URL=$VITE_SITE_URL
 
 COPY frontend/package*.json ./
 # Vite and the React plugin are build-time devDependencies.
-RUN npm config set registry "$NPM_REGISTRY" \
-    && npm config set replace-registry-host always \
-    && npm ci --include=dev --no-audit --no-fund \
+RUN npm config set registry "https://registry.npmjs.org/" \
+    && npm ci --include=dev --ignore-scripts --no-audit --no-fund \
     && test -x node_modules/.bin/vite
 COPY frontend/ ./
 RUN npm run build

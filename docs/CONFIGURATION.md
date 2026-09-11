@@ -66,10 +66,9 @@ Vite reads these values during `npm run build` or the frontend Docker image buil
 | `VITE_SITE_URL` | `https://chat.example.com` | Public site URL passed to the frontend build. Keep it aligned with the deployed origin |
 | `VITE_SOURCEMAP` | `false` | Set to `true` to generate frontend source maps. Keep them private when enabled |
 
-`NPM_REGISTRY` is a Compose build argument rather than a browser setting. Compose defaults to
-`https://mirror-npm.runflare.com` for the target deployment environment; set it in the root `.env`
-to `https://registry.npmjs.org` or another reachable npm-compatible mirror when appropriate. The
-lockfile integrity hashes still verify the downloaded packages.
+The frontend image installs the lockfile from the official npm registry
+(`https://registry.npmjs.org`) and does not accept an arbitrary registry override. This keeps
+production builds on the same trusted package source as the committed lockfile.
 
 The browser selects `ws://` for an HTTP page and `wss://` for an HTTPS page. The client appends `/ws/chat/<room_id>/` and `/ws/status/` to `VITE_WS_HOST`.
 

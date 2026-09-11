@@ -7,10 +7,21 @@ from datetime import timedelta
 from django.core.exceptions import ImproperlyConfigured
 from .base import *
 
+
+def require_production_secret(name):
+    """Load a strong, non-template secret from the process environment."""
+
+    value = os.environ.get(name, "")
+    placeholder_prefixes = ("generate_", "replace_", "change_me")
+    if len(value) < 50 or value.lower().startswith(placeholder_prefixes):
+        raise ImproperlyConfigured(
+            f"{name} must be a real random secret of at least 50 characters."
+        )
+    return value
+
+
 DEBUG = False
-SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
-if not SECRET_KEY:
-    raise ImproperlyConfigured("DJANGO_SECRET_KEY must be set in production.")
+SECRET_KEY = require_production_secret("DJANGO_SECRET_KEY")
 
 ALLOWED_HOSTS = [
     host.strip()
@@ -48,9 +59,7 @@ CORS_ALLOW_CREDENTIALS = True
 
 # Query-string WebSocket tokens have a shorter production lifetime. Clients
 # refresh through the existing REST refresh endpoint.
-JWT_SIGNING_KEY = os.environ.get("JWT_SIGNING_KEY")
-if not JWT_SIGNING_KEY:
-    raise ImproperlyConfigured("JWT_SIGNING_KEY must be set in production.")
+JWT_SIGNING_KEY = require_production_secret("JWT_SIGNING_KEY")
 
 SIMPLE_JWT["SIGNING_KEY"] = JWT_SIGNING_KEY
 SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"] = timedelta(

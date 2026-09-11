@@ -13,19 +13,20 @@ REST (`/api/...`) and WebSockets (`/ws/...`).
 ### Backend (run from `backend/`, with `venv` activated: `source venv/bin/activate`)
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 python manage.py migrate
 python manage.py runserver          # serves both HTTP and WebSockets via Daphne (ASGI)
 python manage.py createsuperuser
 python -m pytest                    # uses the configured test settings
-black .                             # format
+black conftest.py manage.py  # format
+find accounts chat chat_project -name '*.py' -exec black {} \;
 flake8                             # lint
 ```
 
 - **PostgreSQL and Redis must be running** in development (the supplied
   `docker-compose.yml` starts both). Development now uses the same engines as
   production; set `DEV_USE_SQLITE=1` only for a deliberate fallback.
-- `pytest.ini` selects `chat_project.settings`; `DJANGO_ENV=test` uses isolated
+- `pytest.ini` selects `chat_project.settings.test` for isolated
   SQLite/in-memory Channels settings. Tests cover auth, permissions,
   soft-delete, upload cleanup, REST/WS event parity, and
   `WebsocketCommunicator` consumer flows.

@@ -53,7 +53,7 @@ This path runs only PostgreSQL and Redis in Docker. It keeps the backend and fro
    cd backend
    python -m venv venv
    source venv/bin/activate
-   pip install -r requirements.txt
+   pip install -r requirements-dev.txt
    ```
 
 5. Load the root environment variables into the backend shell and prepare the database:
@@ -93,11 +93,9 @@ The Compose deployment starts all application services. The supplied Nginx confi
    cp .env.example .env
    ```
 
-   The Compose file anchors build contexts and the deployment Nginx
-   configuration to `PROJECT_ROOT` (default: `/www/wwwroot/paradise-chat`).
-   This prevents a command launched from a deleted or recycle-bin copy from
-   building stale source. Set `PROJECT_ROOT` to the absolute path of the
-   intended checkout when deploying elsewhere.
+   Compose resolves build contexts and the deployment Nginx configuration from
+   the repository containing `docker-compose.yml`. Run the command from the
+   intended checkout.
 
 2. Set deployment values in `.env`. For a domain behind an external TLS proxy, use values like these:
 
@@ -112,9 +110,6 @@ The Compose deployment starts all application services. The supplied Nginx confi
    SECURE_SSL_REDIRECT=False
    ```
 
-   If the server cannot reliably reach `registry.npmjs.org`, set `NPM_REGISTRY` to an
-   npm-compatible mirror before building, for example `NPM_REGISTRY=https://mirror-npm.runflare.com`.
-
 3. Replace the example secret and database values. Keep the internal Compose values for `DB_HOST`, `REDIS_URL`, and `REDIS_CACHE_URL`; the Compose file supplies the service names and Redis databases. Keep `localhost` in `ALLOWED_HOSTS` because the backend health check calls the container directly with that host name
 4. Validate the configuration:
 
@@ -122,8 +117,7 @@ The Compose deployment starts all application services. The supplied Nginx confi
    docker compose config
    ```
 
-   Confirm that the rendered `build.context` values point to the intended
-   checkout, not a temporary or recycle-bin directory.
+   Confirm that the rendered build context is the intended checkout.
 
 5. Build and start the stack:
 
@@ -231,12 +225,12 @@ Take a PostgreSQL and media backup before a release that changes the schema. Fol
 
 ## Test settings and isolated checks
 
-The pytest configuration points to `chat_project.settings`. Set `DJANGO_ENV=test` to load isolated SQLite, in-memory Channels, and local memory cache settings:
+The pytest configuration points directly to `chat_project.settings.test`, which loads isolated SQLite, in-memory Channels, and local memory cache settings:
 
 ```bash
 cd backend
 source venv/bin/activate
-DJANGO_ENV=test pytest
+pytest
 ```
 
 Run the frontend checks from `frontend/`:

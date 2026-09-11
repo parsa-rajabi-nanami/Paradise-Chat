@@ -17,11 +17,14 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - run: pip install -r requirements.txt pip-audit
-      - run: black --check .
+      - run: pip install -r requirements-dev.txt pip-audit
+      - run: |
+          for file in conftest.py manage.py $(find accounts chat chat_project -name '*.py' -print); do
+            black --check "$file"
+          done
       - run: flake8 .
       - run: python -m pytest
-      - run: pip-audit -r requirements.txt
+      - run: pip-audit -r requirements-dev.txt
 
   frontend:
     runs-on: ubuntu-latest
@@ -35,7 +38,7 @@ jobs:
           node-version: "20"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm run lint
       - run: VITE_SITE_URL=http://localhost npm run build
       - run: npm audit --audit-level=high

@@ -41,6 +41,10 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
+- Compose builds now use the repository-local context and the official npm
+  registry only; the default test command uses isolated test settings.
+- Production images now exclude test and lint tooling, and production rejects
+  undersized or template Django/JWT secrets during startup checks.
 - Development now defaults to PostgreSQL/Redis parity; SQLite is limited to
   isolated test or explicitly opted-in lightweight fallback usage
 - Production configuration fails closed for missing secrets, database password,
