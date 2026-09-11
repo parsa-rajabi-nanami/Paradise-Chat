@@ -9,7 +9,8 @@ ENV VITE_API_URL=$VITE_API_URL \
     VITE_SITE_URL=$VITE_SITE_URL
 
 COPY frontend/package*.json ./
-RUN npm ci
+# Vite and the React plugin are build-time devDependencies.
+RUN npm ci --include=dev
 COPY frontend/ ./
 RUN npm run build
 
