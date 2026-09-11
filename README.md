@@ -29,7 +29,7 @@ The [installation guide](docs/INSTALLATION.md) lists prerequisites and includes 
 
 The development workflow keeps the application processes on your machine and runs PostgreSQL and Redis in Docker. It gives you production-like database and real-time behavior while keeping code reload available.
 
-1. Install Python 3.12 or newer, Node.js 18 or newer, npm 9 or newer, Docker, and Docker Compose
+1. Install Python 3.12 or newer, Node.js 20.19+ (or 22.12+), npm 9 or newer, Docker, and Docker Compose
 2. Copy the environment template and adjust local values:
 
    ```bash

@@ -15,7 +15,7 @@ Install these tools before you begin:
 | Tool | Supported baseline | Used by |
 | --- | --- | --- |
 | Python | 3.12 or newer | Django backend and tests |
-| Node.js | 18 or newer | React and Vite frontend |
+| Node.js | 20.19+ (or 22.12+) | React and Vite frontend |
 | npm | 9 or newer | Frontend dependencies and build |
 | PostgreSQL | 14 or newer | Durable application data |
 | Redis | 6 or newer | Channels and cache |

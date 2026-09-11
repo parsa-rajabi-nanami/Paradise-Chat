@@ -1,6 +1,10 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 
+# The Vite toolchain is a devDependency, but it is required while building the
+# static bundle. Keep npm from inheriting a production-only install policy.
+ENV NODE_ENV=development
+
 ARG VITE_API_URL=http://localhost/api
 ARG VITE_WS_HOST=localhost
 ARG VITE_SITE_URL=http://localhost
@@ -10,7 +14,8 @@ ENV VITE_API_URL=$VITE_API_URL \
 
 COPY frontend/package*.json ./
 # Vite and the React plugin are build-time devDependencies.
-RUN npm ci --include=dev
+RUN npm ci --include=dev \
+    && test -x node_modules/.bin/vite
 COPY frontend/ ./
 RUN npm run build
 
