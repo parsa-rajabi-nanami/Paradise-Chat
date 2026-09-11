@@ -93,6 +93,12 @@ The Compose deployment starts all application services. The supplied Nginx confi
    cp .env.example .env
    ```
 
+   The Compose file anchors build contexts and the deployment Nginx
+   configuration to `PROJECT_ROOT` (default: `/www/wwwroot/paradise-chat`).
+   This prevents a command launched from a deleted or recycle-bin copy from
+   building stale source. Set `PROJECT_ROOT` to the absolute path of the
+   intended checkout when deploying elsewhere.
+
 2. Set deployment values in `.env`. For a domain behind an external TLS proxy, use values like these:
 
    ```env
@@ -112,6 +118,9 @@ The Compose deployment starts all application services. The supplied Nginx confi
    ```bash
    docker compose config
    ```
+
+   Confirm that the rendered `build.context` values point to the intended
+   checkout, not a temporary or recycle-bin directory.
 
 5. Build and start the stack:
 
