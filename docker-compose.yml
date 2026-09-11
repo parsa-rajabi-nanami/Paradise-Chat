@@ -82,6 +82,9 @@ services:
         VITE_API_URL: ${VITE_API_URL:-http://localhost/api}
         VITE_WS_HOST: ${VITE_WS_HOST:-localhost}
         VITE_SITE_URL: ${VITE_SITE_URL:-http://localhost}
+        # The default mirror is reachable from the target deployment environment.
+        # Set NPM_REGISTRY=https://registry.npmjs.org when the public registry is preferred.
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://mirror-npm.runflare.com}
     depends_on:
       - backend
     restart: unless-stopped

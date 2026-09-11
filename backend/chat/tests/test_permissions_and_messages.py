@@ -122,7 +122,9 @@ def test_user_cannot_read_or_modify_another_users_room(
     message_id = created.json()["id"]
 
     assert outsider_client.get(f"/api/chat/rooms/{room.id}/").status_code == 404
-    assert outsider_client.get(f"/api/chat/rooms/{room.id}/messages/").status_code == 404
+    assert (
+        outsider_client.get(f"/api/chat/rooms/{room.id}/messages/").status_code == 404
+    )
     assert (
         outsider_client.patch(
             f"/api/chat/rooms/{room.id}/messages/{message_id}/",

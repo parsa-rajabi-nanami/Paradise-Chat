@@ -220,7 +220,11 @@ class ChatRoomSerializer(serializers.ModelSerializer):
             return None
         request = self.context.get("request")
         path = reverse("room_avatar", kwargs={"room_id": obj.id})
-        return request.build_absolute_uri(path) if request else f"{settings.BASE_URL}{path}"
+        return (
+            request.build_absolute_uri(path)
+            if request
+            else f"{settings.BASE_URL}{path}"
+        )
 
     def get_last_message(self, obj):
         if getattr(obj, "summary_message_id", None):

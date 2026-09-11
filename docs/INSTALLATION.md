@@ -112,6 +112,9 @@ The Compose deployment starts all application services. The supplied Nginx confi
    SECURE_SSL_REDIRECT=False
    ```
 
+   If the server cannot reliably reach `registry.npmjs.org`, set `NPM_REGISTRY` to an
+   npm-compatible mirror before building, for example `NPM_REGISTRY=https://mirror-npm.runflare.com`.
+
 3. Replace the example secret and database values. Keep the internal Compose values for `DB_HOST`, `REDIS_URL`, and `REDIS_CACHE_URL`; the Compose file supplies the service names and Redis databases. Keep `localhost` in `ALLOWED_HOSTS` because the backend health check calls the container directly with that host name
 4. Validate the configuration:
 

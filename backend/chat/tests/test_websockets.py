@@ -229,7 +229,9 @@ def test_rest_and_ws_message_broadcast_shapes_match(parity_room, monkeypatch):
     async_to_sync(_ws_message_for_parity)(user, room, rest_event)
 
 
-def test_websocket_edit_and_delete_are_bound_to_connected_room(user_factory, room_factory):
+def test_websocket_edit_and_delete_are_bound_to_connected_room(
+    user_factory, room_factory
+):
     user = user_factory("room_bound_user")
     first_room = room_factory(owner=user)
     second_room = room_factory(owner=user)
