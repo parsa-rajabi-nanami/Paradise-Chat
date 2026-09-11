@@ -14,7 +14,9 @@ ENV VITE_API_URL=$VITE_API_URL \
 
 COPY frontend/package*.json ./
 # Vite and the React plugin are build-time devDependencies.
-RUN npm ci --include=dev \
+RUN npm config set registry https://registry.npmjs.org \
+    && npm config set replace-registry-host always \
+    && npm ci --include=dev \
     && test -x node_modules/.bin/vite
 COPY frontend/ ./
 RUN npm run build
