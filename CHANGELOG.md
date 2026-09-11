@@ -36,7 +36,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Axios interceptors for automatic access-token refresh and queuing of concurrent 401s
 - Protected routes and lazy-loaded pages (ChatPage, UserSettings, ChatSettings)
 - Backend settings package that dispatches between development and production based on `DJANGO_ENV`
-- Development environment uses SQLite and open CORS; production uses PostgreSQL, Redis, and hardened security headers
+- Development environment uses PostgreSQL and Redis by default; SQLite is an explicit fallback and test isolation uses dedicated settings
 - Custom user model with email login, Argon2 hashing, and passphrase confirmation for sensitive actions
 
 ### Changed

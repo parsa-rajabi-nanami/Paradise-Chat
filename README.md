@@ -1,215 +1,135 @@
 # Paradise Chat
 
-A modern, production-ready real-time chat application built with Django, Django Channels, React, PostgreSQL, and Redis.
+Paradise Chat is a real-time messaging service for direct conversations, group chats, file attachments, online presence, and room administration. The service uses a Django and Django Channels backend, a React and Vite frontend, PostgreSQL for durable data, and Redis for real-time coordination and caching.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-blue)
-![Node 18+](https://img.shields.io/badge/Node-18%2B-green)
-![PostgreSQL 14+](https://img.shields.io/badge/PostgreSQL-14%2B-blue)
-![Redis 6+](https://img.shields.io/badge/Redis-6%2B-red)
+This README helps you choose an installation path. Read the [installation guide](docs/INSTALLATION.md) for commands, the [user guide](docs/USER_GUIDE.md) for day-to-day use, and the [operations runbook](docs/OPERATIONS.md) for deployment, backups, and troubleshooting.
 
----
+## What you can do
 
-## Features
+- Create an account with email, username, password, and a security passphrase
+- Start direct conversations and group chats
+- Organize groups with optional subgroups
+- Send text messages and validated attachments up to 10 MB
+- Edit or soft-delete your own text messages
+- See typing indicators, read receipts, and online presence
+- Manage group members with owner, admin, and member roles
+- Update your profile, avatar, notification preferences, and security credentials
 
-**User**
-- Real-time messaging with WebSockets
-- Private chats
-- Group chats
-- Online/offline status
-- Message editing and deletion
-- Mute and permission system
+## Choose an installation path
 
-**Backend / API**
-- JWT authentication
-- REST API powered by Django REST Framework
-- User management
-- File attachments via REST
+Use one of these supported paths:
 
-**Frontend**
-- Responsive React frontend
-- State management with Zustand
+- **Development**: Run PostgreSQL and Redis with Docker Compose, then run Django and Vite from the source tree
+- **Production with Docker**: Run the complete PostgreSQL, Redis, backend, frontend, and Nginx stack with Compose
+- **Manual installation**: Install PostgreSQL and Redis on the host, then run the backend and frontend with a process supervisor and reverse proxy
 
----
+The [installation guide](docs/INSTALLATION.md) lists prerequisites and includes all three paths. The root [.env.example](.env.example) is the canonical environment variable checklist.
 
-## Requirements
+## Quick start for development
 
-| Requirement | Minimum |
-|---|---|
-| Python | 3.12+ |
-| Node.js | 18+ (20 LTS Recommended) |
-| npm | 9+ |
-| PostgreSQL | 14+ |
-| Redis | 6+ |
+The development workflow keeps the application processes on your machine and runs PostgreSQL and Redis in Docker. It gives you production-like database and real-time behavior while keeping code reload available.
 
----
+1. Install Python 3.12 or newer, Node.js 18 or newer, npm 9 or newer, Docker, and Docker Compose
+2. Copy the environment template and adjust local values:
 
-## Project Structure
-
-```text
-backend/
-frontend/
-```
-
----
-
-## Installation
-
-### Backend Setup
-
-1. Clone the repository:
    ```bash
-   git clone git@github.com:parsa-rajabi-nanami/Paradise-Chat.git
-   cd Paradise-Chat
-   cd backend
+   cp .env.example .env
    ```
-2. Create and activate a virtual environment:
+
+3. Start PostgreSQL and Redis:
+
    ```bash
+   docker compose up -d db redis
+   ```
+
+4. Create the backend environment, install packages, and migrate the database:
+
+   ```bash
+   cd backend
    python -m venv venv
    source venv/bin/activate
-   ```
-3. Install dependencies:
-   ```bash
    pip install -r requirements.txt
-   ```
-4. Copy the root example file, set local PostgreSQL, Redis, and secret values,
-   and export it for the current shell. Do not commit `.env`.
-   ```bash
-   cp ../.env.example ../.env
    set -a; source ../.env; set +a
-   ```
-5. Start the production-like local dependencies:
-   ```bash
-   cd ..
-   docker compose up -d db redis
-   cd backend
-   ```
-6. Apply migrations:
-   ```bash
    python manage.py migrate
-   ```
-7. Create a superuser:
-   ```bash
    python manage.py createsuperuser
-   ```
-8. Run the development server:
-   ```bash
    python manage.py runserver
    ```
 
-### Frontend Setup
+5. In a second terminal, install and start the frontend:
 
-1. Navigate to the frontend directory:
    ```bash
    cd frontend
-   ```
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Create a `.env` file with the following variables:
-   ```env
-   VITE_API_URL=http://localhost:8000/api
-   VITE_WS_HOST=localhost:8000
-   VITE_SITE_URL=http://localhost:3000
-   ```
-4. Start the Vite dev server:
-   ```bash
+   npm ci
+   cp .env-sample .env
    npm run dev
    ```
 
----
+6. Open `http://localhost:3000`, register an account, and start a conversation
 
-## Usage
+For the complete setup, including Windows notes and production configuration, read [docs/INSTALLATION.md](docs/INSTALLATION.md).
 
-### 1. Start the backend
-Run the Django development server as described above. It serves both HTTP and WebSocket connections via Daphne (ASGI).
+## Project structure
 
-### 2. Start the frontend
-Run the Vite dev server as described above. The frontend runs on `http://localhost:3000` by default.
-
-### 3. Authenticate and chat
-- Register a new account or log in with an existing user.
-- Create or join private and group chats.
-
----
-
-## Configuration
-
-The backend settings live in `chat_project/settings/` and are selected based on the `DJANGO_ENV` environment variable.
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `DJANGO_ENV` | `development` | Which settings module to load (`development` or `production`) |
-| `DJANGO_SECRET_KEY` | dev-only fallback | Required and strong in production |
-| `JWT_SIGNING_KEY` | — | Required separate JWT signing secret in production |
-| `ACCESS_TOKEN_MINUTES` | `15` in production | Access JWT lifetime; bounds WS query-token exposure |
-| `VITE_API_URL` | — | Base URL for the REST API used by the frontend |
-| `VITE_WS_HOST` | — | WebSocket host used by the frontend |
-| `VITE_SITE_URL` | — | Public frontend origin used in metadata |
-| `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT` | — | PostgreSQL connection settings |
-| `REDIS_URL`, `REDIS_CACHE_URL` | — | Separate Channels and cache Redis URLs |
-| `ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS` | — | Required explicit production allow-lists |
-| `LOGIN_THROTTLE_RATE`, `REGISTER_THROTTLE_RATE` | `10/minute`, `5/hour` | Auth abuse limits |
-| `WS_RATE_LIMIT_WINDOW_SECONDS`, `WS_RATE_LIMIT_MESSAGES` | `10`, `30` | Per-connection WS flood guard |
-
----
-
-## WebSocket Endpoints
-
-| Endpoint | Description |
-|---|---|
-| `/ws/chat/<room_id>/` | Per-room messaging (text, typing, read receipts, edits, deletes) |
-| `/ws/status/` | Global online presence and 30s heartbeat |
-| `/api/chat/messages/<message_id>/attachment/` | Authenticated attachment stream for room participants |
-
----
-
-## Security
-
-- JWT authentication with rotating refresh tokens and blacklist after rotation
-- Argon2 password hashing for user accounts
-- Soft-delete for messages
-- Passphrase confirmation for sensitive actions
-- Production settings enable full security headers, HSTS, and SSL redirect
-- File uploads are handled over authenticated REST endpoints
-- WebSocket query JWTs are short-lived in production and excluded from the
-  supplied Nginx access-log request line; see [SECURITY.md](SECURITY.md)
-- Attachments are streamed through an authenticated endpoint; `/media/` is not
-  public in the production Nginx configuration
-
----
-
-## Development
-
-### Backend
-
-```bash
-cd backend
-source venv/bin/activate
-black .
-flake8
-DJANGO_ENV=test pytest
+```text
+backend/                 Django project, REST API, WebSocket consumers, and tests
+frontend/                React application, Vite build, and client state
+deploy/nginx/            Reverse proxy configuration for the Compose stack
+docs/                    Installation, usage, architecture, API, and operations guides
+docker-compose.yml       PostgreSQL, Redis, backend, frontend, and Nginx services
 ```
 
-For the full production-like stack, copy `.env.example` to `.env` and run
-`docker compose up --build`. The stack starts PostgreSQL, Redis, the ASGI
-backend, the Vite-built frontend, and Nginx with WebSocket upgrade support.
+## Service architecture
 
-### Frontend
+The browser uses REST for authentication, room management, profile changes, message history, and file uploads. It uses WebSockets for live text messages, typing events, read events, edits, deletes, and presence. Both message transports write to PostgreSQL and publish room events through Redis. Read the [architecture guide](docs/ARCHITECTURE.md) for the event flow, data model, and deployment boundaries.
+
+## Configuration and security
+
+Settings load from `backend/chat_project/settings/` according to `DJANGO_ENV`:
+
+- `development` uses PostgreSQL and Redis by default, allows local hosts, and uses the console email backend
+- `production` requires explicit secrets, PostgreSQL credentials, Redis URLs, allowed hosts, and CORS origins
+- `test` uses isolated SQLite, in-memory Channels, and local memory cache for the test suite
+
+Read [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for every supported variable and [SECURITY.md](SECURITY.md) for the security model, upload rules, and WebSocket token trade-off.
+
+Production stores messages, users, rooms, and token blacklist rows in PostgreSQL. Redis stores Channels coordination data and cache entries, so Redis is not a source of truth. Attachments live in the configured media storage and need a separate backup. See [docs/OPERATIONS.md](docs/OPERATIONS.md).
+
+## Useful checks
+
+Run backend checks from `backend/` with the virtual environment active:
 
 ```bash
-cd frontend
+python manage.py check
+DJANGO_ENV=test pytest
+black --check .
+flake8
+```
+
+Run frontend checks from `frontend/`:
+
+```bash
 npm run lint
 npm run build
 ```
 
-## Changelog
+Validate the Compose file before a deployment:
 
-See [CHANGELOG.md](CHANGELOG.md).
+```bash
+docker compose config
+```
 
----
+## Documentation map
+
+- [Installation](docs/INSTALLATION.md): Development, Docker production, manual installation, migrations, and build commands
+- [User guide](docs/USER_GUIDE.md): Account creation, chats, attachments, settings, and room roles
+- [Configuration reference](docs/CONFIGURATION.md): Settings selection and environment variables
+- [Architecture](docs/ARCHITECTURE.md): Backend, frontend, REST, WebSockets, Redis, and data flow
+- [API reference](docs/API.md): Authentication, account, room, message, and WebSocket contracts
+- [Operations runbook](docs/OPERATIONS.md): Deployment, health checks, backups, restores, and troubleshooting
+- [Security policy](SECURITY.md): Vulnerability reporting and runtime protections
+- [Contributing](CONTRIBUTING.md): Development conventions and pull request checks
+- [Changelog](CHANGELOG.md): Release history and unreleased changes
 
 ## License
 
-[MIT](LICENSE) © 2026 Parsa Rajabi
+Paradise Chat is available under the [MIT License](LICENSE).

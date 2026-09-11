@@ -1,191 +1,106 @@
 # Contributing to Paradise Chat
 
-Thank you for taking the time to contribute.
+Thank you for contributing. This guide explains how to prepare a development environment, preserve the service contracts, and validate a pull request.
 
----
+## Before you start
 
-## Table of contents
-
-- [Code of Conduct](#code-of-conduct)
-- [How to report a bug](#how-to-report-a-bug)
-- [How to request a feature](#how-to-request-a-feature)
-- [Development setup](#development-setup)
-- [Making changes](#making-changes)
-- [Pull request checklist](#pull-request-checklist)
-- [Coding standards](#coding-standards)
-
----
-
-## Code of Conduct
-
-This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). By participating you agree to abide by its terms.
-
----
-
-## How to report a bug
-
-1. Search [existing issues](https://github.com/your-org/paradise-chat/issues) first.
-2. If none match, open a **Bug Report** using the issue template.
-3. Include the following:
-   - Backend: Python version, Django version, PostgreSQL version, Redis version.
-   - Frontend: Node.js version, browser and version.
-   - Steps to reproduce, expected vs actual behaviour.
-   - Relevant logs (backend console, browser console, network tab).
-   - If the bug is WebSocket-related, note whether it occurs on `ws/chat/<room_id>/`, `ws/status/`, or both.
-
----
-
-## How to request a feature
-
-Open a **Feature Request** using the issue template and describe the use case clearly. Include any relevant UI/UX expectations and how the feature should integrate with the existing REST or WebSocket architecture.
-
----
+Read the [Code of Conduct](CODE_OF_CONDUCT.md), search existing issues, and choose the smallest change that addresses the problem. Use the repository's current commands and dependencies unless the change requires an update.
 
 ## Development setup
 
-### Prerequisites
-
-| Tool | Version |
-|---|---|
-| Python | 3.12+ |
-| Node.js | 18+ (20 LTS recommended) |
-| npm | 9+ |
-| PostgreSQL | 14+ |
-| Redis | 6+ |
-
-> **Note:** The development settings (`DJANGO_ENV=development`) use SQLite by default, but PostgreSQL is required for production and is recommended if you are working on database-specific features.
-
-### Quick start
+The default development settings use PostgreSQL and Redis. The supplied Docker Compose file starts both services without starting the application containers:
 
 ```bash
-git clone git@github.com:parsa-rajabi-nanami/Paradise-Chat.git
-cd paradise-chat
+cp .env.example .env
+docker compose up -d db redis
 ```
 
-#### Backend
+In `backend/`, create a virtual environment, load the root environment file, install dependencies, and run migrations:
 
 ```bash
-cd backend
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+set -a; source ../.env; set +a
 python manage.py migrate
-python manage.py createsuperuser
 python manage.py runserver
 ```
 
-#### Frontend
-
-In a separate terminal:
+In a second terminal, install frontend dependencies and start Vite:
 
 ```bash
 cd frontend
-npm install
-cp .env.example .env
+npm ci
+cp .env-sample .env
 npm run dev
 ```
 
-**Required environment variables (frontend):**
+Use `DJANGO_ENV=test` for the isolated pytest settings. Set `DEV_USE_SQLITE=1` only when you need the deliberate lightweight development fallback; Redis is still required for real-time features unless the test settings are active.
 
-```env
-VITE_API_URL=http://localhost:8000
-VITE_WS_HOST=ws://localhost:8000
-```
+## Architecture rules
 
-**Required services:** Redis must be running on `127.0.0.1:6379` even in development because the Channels layer uses `RedisChannelLayer`.
+Preserve these contracts when changing the service:
 
-### Manual setup
+- The backend exposes REST under `/api/` and WebSockets under `/ws/`
+- Text messages, typing, reads, edits, and deletes can travel over WebSockets; file uploads use the authenticated REST message endpoint
+- REST and WebSocket message operations write to the same database and broadcast to the same Redis group, `chat_{room_id}`
+- WebSocket authentication uses a short-lived access JWT in the `token` query parameter because browsers cannot set handshake headers
+- Messages use soft deletion. Normal user flows must not hard-delete a message
+- Room queries must preserve active-room and active-parent filtering
+- The frontend uses the singleton `wsService` and the two Zustand stores. Do not create a second WebSocket service
+- Authenticated API calls must use the Axios client so token refresh and its concurrent-request queue remain active
 
-If you prefer manual control:
-
-1. Create a Python virtual environment in `backend/` and install dependencies.
-2. Ensure PostgreSQL and Redis are running (or switch `DJANGO_ENV` to `development` to use SQLite).
-3. Set any production-only environment variables if you run with `DJANGO_ENV=production`.
-4. Run migrations, create a superuser, and start the server.
-5. In `frontend/`, install npm dependencies and start the Vite dev server.
-
----
+Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) before changing transport, room hierarchy, authentication, or storage behavior.
 
 ## Making changes
 
-### Architecture rules
+1. Create a focused branch, such as `feat/group-invites`, `fix/ws-reconnect`, or `docs/installation-guide`
+2. Inspect nearby tests before editing backend behavior
+3. Add or update tests for changed REST, WebSocket, permission, migration, or storage behavior
+4. Update the relevant documentation when a command, environment variable, API contract, or user-facing behavior changes
+5. Run the smallest relevant checks, then run the full checks before opening a pull request
 
-#### Backend
+## Validation commands
 
-- Messaging works over **two transports** that both write to the DB and broadcast to the same Redis channel group `chat_{room_id}`:
-  1. WebSocket (`chat/consumers.py::ChatConsumer`) handles text messages, typing, read receipts, edits, and deletes.
-  2. REST (`chat/views.py`) handles the same operations for HTTP clients, including file attachments (multipart).
-- When adding or modifying message-related actions, **keep the event payload shapes in sync** across REST and WebSocket handlers. Event types include `chat_message`, `message_edited`, `message_deleted`, `user_join`, `user_leave`, and others.
-- **Never hard-delete messages** in normal flow; use the soft-delete pattern (`is_deleted=True` and a tombstone content).
-- WebSocket authentication uses a JWT in the query string (`?token=<access>`). Do not switch to header-based auth for WS.
-- Role-based permissions for room participants live in `chat/views.py::ManageParticipantView`. Preserve the existing owner/admin/member hierarchy.
-- Read `chat/utils.py::flatten_rooms` before modifying room tree logic; the sidebar depends on its recursive flattening and `depth` field.
-- All new model queries that involve rooms should respect the active-parent condition: `Q(parent__isnull=True) | Q(parent__is_active=True)`.
+Run backend checks from `backend/`:
 
-#### Frontend
-
-- State is managed by two Zustand stores: `authStore` (persisted to `localStorage`) and `chatStore`. Components should read from the store and call `wsService` to send.
-- `services/websocket.js` is a singleton that owns both WebSocket connections, auto-reconnects with exponential backoff, and mutates `chatStore` directly. Do not create additional WebSocket instances.
-- File attachments must go through REST (`api/client.js`), not the WebSocket. The `sendMessage` method in `wsService` already routes uploads correctly.
-- When adding new UI components, prefer lazy-loading them in `App.jsx` to match the current pattern.
-- `api/client.js` handles token refresh with a queue; do not bypass the interceptors for authenticated requests.
-
-### Branch naming
-
-```
-feat/short-description
-fix/short-description
-docs/short-description
-chore/short-description
+```bash
+python -m pytest
+black --check .
+flake8
 ```
 
-### Commit messages
+Run frontend checks from `frontend/`:
 
-Use [Conventional Commits](https://www.conventionalcommits.org/):
-
-```
-feat: add group chat creation modal
-fix: correct WebSocket reconnect backoff
-docs: update environment variable guide
+```bash
+npm run lint
+npm run build
 ```
 
----
+Run the deployment configuration check from the repository root:
+
+```bash
+docker compose config
+```
 
 ## Pull request checklist
 
-- [ ] Backend code formatted with Black and passes Flake8
-- [ ] Frontend code passes ESLint (`npm run lint`)
-- [ ] New REST or WebSocket events keep payload shapes consistent between consumer and view handlers
-- [ ] Database changes include migrations (if applicable)
-- [ ] No hard-deletes added to message flows
-- [ ] Frontend changes do not break the two‑transport rule (file uploads still use REST)
-- [ ] New environment variables documented in README or settings comments
-- [ ] CHANGELOG.md updated under `[Unreleased]`
-- [ ] README.md updated if the change affects user-facing behaviour or setup
-- [ ] No commented-out code committed
+- [ ] The change has focused tests or a documented reason that tests do not apply
+- [ ] Backend checks pass: pytest, Black, and Flake8
+- [ ] Frontend checks pass: ESLint and the production build
+- [ ] New migrations are included and reviewed for safe rollout
+- [ ] REST and WebSocket event payloads remain compatible
+- [ ] File uploads still use REST and authenticated streaming
+- [ ] No message hard-delete was added to a normal user flow
+- [ ] New environment variables appear in `.env.example` and `docs/CONFIGURATION.md`
+- [ ] User-facing setup or behavior changes appear in `README.md` and the relevant guide
+- [ ] `CHANGELOG.md` includes the change under `[Unreleased]` when appropriate
+- [ ] No secrets, populated environment files, media files, database files, or build output were committed
 
----
+## Code style and issue reports
 
-## Coding standards
+Use Black and Flake8 for Python. Use functional React components, hooks, the `@` import alias, and the existing Zustand and Axios patterns for frontend changes. Validate and sanitize user input with the existing Django, Django REST Framework, and serializer conventions.
 
-### Backend
+For bug reports, include the operating system, Python, Node.js, browser, PostgreSQL, and Redis versions; reproduction steps; expected and actual behavior; and relevant backend or browser logs. For WebSocket failures, name the affected endpoint, `/ws/chat/<room_id>/` or `/ws/status/`.
 
-- Follow [Django coding style](https://docs.djangoproject.com/en/dev/internals/contributing/writing-code/coding-style/).
-- Python code is formatted with [Black](https://black.readthedocs.io/) and linted with [Flake8](https://flake8.pycqa.org/).
-- Use Django’s ORM, avoid raw SQL unless absolutely necessary.
-- Ensure all user input is validated and sanitised; use Django forms or DRF serializers.
-- Follow the existing model method and property naming conventions (`is_active`, `is_online`, `room_type`, etc.).
-
-### Frontend
-
-- Follow the existing React + Vite project conventions.
-- JavaScript/JSX is linted with ESLint; `npm run lint` must pass with zero warnings.
-- Use functional components and hooks.
-- Keep Zustand stores focused; do not add unrelated state to `chatStore` or `authStore`.
-- Use `@` alias for imports from `src/`.
-
-### General
-
-- All new code should be readable, well-named, and consistent with the surrounding codebase.
-- Prefer small, focused pull requests over large monolithic ones.
-- If you are unsure about architecture, open an issue or draft PR to discuss before implementing.
+Use Conventional Commits, for example `docs: update installation guide` or `fix: preserve websocket event shape`.
