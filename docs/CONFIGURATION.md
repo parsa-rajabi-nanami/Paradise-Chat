@@ -51,9 +51,13 @@ These variables control host bindings or process count in `docker-compose.yml`:
 | --- | --- | --- |
 | `DB_BIND_ADDRESS` | `127.0.0.1` | Host address for the PostgreSQL port mapping |
 | `REDIS_BIND_ADDRESS` | `127.0.0.1` | Host address for the Redis port mapping |
+| `APP_BIND_ADDRESS` | `127.0.0.1` | Host address for the Compose Nginx gateway |
+| `APP_PORT` | `8080` | Host port mapped to the Compose Nginx gateway |
 | `WEB_CONCURRENCY` | `2` | Gunicorn worker count for the backend container |
 
-Bind database and Redis ports to localhost unless another trusted service needs host access.
+Bind database, Redis, and the application gateway to localhost when an external reverse proxy such as aaPanel owns public ports 80 and 443. Set `APP_BIND_ADDRESS=0.0.0.0` only when the host firewall and deployment design require direct public access.
+
+The deployment script chooses an unused port from `8080` through `8099` when a new `.env` does not define `APP_PORT`. It preserves an existing `APP_PORT` on later runs.
 
 ## Frontend variables
 
@@ -61,7 +65,7 @@ Vite reads these values during `npm run build` or the frontend Docker image buil
 
 | Variable | Example | Description |
 | --- | --- | --- |
-| `VITE_API_URL` | `https://chat.example.com/api` | Axios base URL. Include the `/api` path |
+| `VITE_API_URL` | `/api` | Axios base URL. Include the `/api` path; use a relative value behind the supplied reverse proxy |
 | `VITE_WS_HOST` | `chat.example.com` | WebSocket host and optional port. Do not include `http://`, `https://`, `ws://`, or `wss://` |
 | `VITE_SITE_URL` | `https://chat.example.com` | Public site URL passed to the frontend build. Keep it aligned with the deployed origin |
 | `VITE_SOURCEMAP` | `false` | Set to `true` to generate frontend source maps. Keep them private when enabled |
@@ -70,7 +74,19 @@ The frontend image installs the lockfile from the official npm registry
 (`https://registry.npmjs.org`) and does not accept an arbitrary registry override. This keeps
 production builds on the same trusted package source as the committed lockfile.
 
-The browser selects `ws://` for an HTTP page and `wss://` for an HTTPS page. The client appends `/ws/chat/<room_id>/` and `/ws/status/` to `VITE_WS_HOST`.
+The browser selects `ws://` for an HTTP page and `wss://` for an HTTPS page. The client appends `/ws/chat/<room_id>/` and `/ws/status/` to `VITE_WS_HOST`. Set `VITE_WS_HOST` to the browser-facing host, not the internal backend service name.
+
+## Deployment profiles
+
+Choose one profile and keep the frontend and backend values aligned:
+
+| Profile | `VITE_API_URL` | `VITE_WS_HOST` | Compose gateway |
+| --- | --- | --- | --- |
+| Local through Compose | `/api` | `127.0.0.1:8080` | `127.0.0.1:8080` |
+| aaPanel or host proxy | `/api` | `chat.example.com` | `127.0.0.1:8080` |
+| Standalone public HTTP | `/api` | `chat.example.com:8080` | `0.0.0.0:8080` |
+
+For a public HTTPS site, keep `VITE_API_URL=/api`, set `VITE_WS_HOST` to the public hostname, and set `VITE_SITE_URL` to the HTTPS origin. The browser then sends REST and WebSocket requests through the same public origin.
 
 ## Runtime controls in Django Admin
 

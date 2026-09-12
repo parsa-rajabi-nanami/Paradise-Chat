@@ -77,9 +77,9 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
       args:
-        VITE_API_URL: ${VITE_API_URL:-http://localhost/api}
-        VITE_WS_HOST: ${VITE_WS_HOST:-localhost}
-        VITE_SITE_URL: ${VITE_SITE_URL:-http://localhost}
+        VITE_API_URL: ${VITE_API_URL:-/api}
+        VITE_WS_HOST: ${VITE_WS_HOST:-}
+        VITE_SITE_URL: ${VITE_SITE_URL:-http://127.0.0.1:8080}
     depends_on:
       - backend
     restart: unless-stopped
@@ -92,7 +92,7 @@ services:
   nginx:
     image: nginx:1.27-alpine
     ports:
-      - "80:80"
+      - "${APP_BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-8080}:80"
     volumes:
       - type: bind
         source: ./deploy/nginx/default.conf

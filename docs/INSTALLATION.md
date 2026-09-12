@@ -83,64 +83,100 @@ This path runs only PostgreSQL and Redis in Docker. It keeps the backend and fro
 
 On Windows, activate the virtual environment with `venv\Scripts\activate`, load environment variables with PowerShell or Docker Desktop, and run the same Django and npm commands from their directories.
 
-## Full deployment with Docker Compose
+## Deploy with Docker Compose
 
-The Compose deployment starts all application services. The supplied Nginx configuration serves HTTP on port 80 and proxies API and WebSocket traffic to the backend.
+Use `scripts/deploy.sh` for a repeatable deployment. It prepares `.env`, keeps secrets out of logs, selects a host port, rebuilds the frontend with same-origin API settings, and waits for service readiness.
 
-1. Copy the environment template:
+### Run the deployment script
 
-   ```bash
-   cp .env.example .env
-   ```
+Run the script from the repository root. The default bind address is `127.0.0.1`, and the default port is `8080`. This works with aaPanel or another host reverse proxy that already owns ports 80 and 443.
 
-   Compose resolves build contexts and the deployment Nginx configuration from
-   the repository containing `docker-compose.yml`. Run the command from the
-   intended checkout.
+```bash
+chmod +x scripts/deploy.sh
+scripts/deploy.sh --port 8080
+```
 
-2. Set deployment values in `.env`. For a domain behind an external TLS proxy, use values like these:
+For a public domain, pass the browser-facing URL:
 
-   ```env
-   DJANGO_ENV=production
-   DJANGO_BASE_URL=https://chat.example.com
-   ALLOWED_HOSTS=chat.example.com,localhost
-   CORS_ALLOWED_ORIGINS=https://chat.example.com
-   VITE_API_URL=https://chat.example.com/api
-   VITE_WS_HOST=chat.example.com
-   VITE_SITE_URL=https://chat.example.com
-   SECURE_SSL_REDIRECT=False
-   ```
+```bash
+scripts/deploy.sh \
+  --site-url https://chat.example.com \
+  --port 8080
+```
 
-3. Replace the example secret and database values. Keep the internal Compose values for `DB_HOST`, `REDIS_URL`, and `REDIS_CACHE_URL`; the Compose file supplies the service names and Redis databases. Keep `localhost` in `ALLOWED_HOSTS` because the backend health check calls the container directly with that host name
-4. Validate the configuration:
+The script performs these actions:
 
-   ```bash
-   docker compose config
-   ```
+- Creates `.env` from `.env.example` when `.env` is missing
+- Saves a timestamped `.env` backup before an existing file changes
+- Generates missing Django and JWT secrets with 64 hexadecimal characters
+- Refuses to invent a password for an existing PostgreSQL container
+- Adds the site host and origin to the backend allow-lists
+- Builds the frontend with `VITE_API_URL=/api`
+- Starts PostgreSQL, Redis, backend, frontend, and the Compose Nginx gateway
+- Waits for backend and frontend healthchecks, then verifies `/healthz`
 
-   Confirm that the rendered build context is the intended checkout.
+The script never removes Docker volumes. Use `--rotate-app-secrets` only when you intend to invalidate existing JWTs:
 
-5. Build and start the stack:
+```bash
+scripts/deploy.sh --site-url https://chat.example.com --port 8080 --rotate-app-secrets
+```
 
-   ```bash
-   docker compose up -d --build
-   ```
+Use `--no-build` only when the images already contain the intended source and frontend configuration:
 
-6. Confirm service status and readiness:
+```bash
+scripts/deploy.sh --site-url https://chat.example.com --port 8080 --no-build
+```
 
-   ```bash
-   docker compose ps
-   curl -i http://localhost/healthz
-   ```
+### Configure aaPanel or another reverse proxy
 
-7. Open the public frontend URL and register the first user. Create an administrator separately if you need Django Admin:
+The Compose Nginx binds to `127.0.0.1:8080` by default. Configure the public host proxy to forward the site to:
 
-   ```bash
-   docker compose exec backend python manage.py createsuperuser
-   ```
+```text
+http://127.0.0.1:8080
+```
 
-The backend container runs `migrate` and `collectstatic` on startup. It runs as a non-root user and stores local media in the `media_data` volume. The frontend values are compiled into the Vite bundle, so changing `VITE_API_URL`, `VITE_WS_HOST`, or `VITE_SITE_URL` requires a frontend image rebuild.
+Enable WebSocket proxying. Forward these paths to the same target:
 
-The supplied Nginx container does not terminate TLS. Put a TLS-aware load balancer or reverse proxy in front of it, or extend the Nginx configuration before exposing the service to the public internet. In the supplied Compose stack, let that external proxy enforce HTTPS and keep `SECURE_SSL_REDIRECT=False` unless you also update the internal health check to send the forwarded HTTPS header.
+- `/api/`
+- `/ws/`
+- `/healthz`
+- `/`
+
+The reverse proxy terminates TLS. Keep `SECURE_SSL_REDIRECT=False` for the supplied internal HTTP hop unless the proxy forwards `X-Forwarded-Proto: https` through every application path, including `/healthz`.
+
+### Configure the environment manually
+
+The script writes the deployment values for you. If you edit `.env` manually, keep the following rules:
+
+- Use separate random values for `DJANGO_SECRET_KEY` and `JWT_SIGNING_KEY`
+- Keep both application secrets at least 50 characters long
+- Avoid `$` in secret values because Compose interprets it as variable expansion
+- Keep `DB_PASSWORD` unchanged when a PostgreSQL volume already contains data
+- Set `VITE_API_URL=/api` for same-origin browser requests
+- Set `VITE_WS_HOST` to the public host and optional port, without a URL scheme
+
+Use the rendered configuration check before starting the stack:
+
+```bash
+docker compose --env-file .env config
+```
+
+The backend container runs `migrate` and `collectstatic` on startup. It runs as a non-root user and stores local media in the `media_data` volume. Changing a `VITE_*` value requires a frontend image rebuild.
+
+### Verify the deployment
+
+Check service state and the internal readiness endpoint:
+
+```bash
+docker compose ps
+curl -i http://127.0.0.1:8080/healthz
+```
+
+The endpoint must return HTTP 200 with both `database` and `redis` marked `ok`. Create an administrator after the first successful deployment if you need Django Admin:
+
+```bash
+docker compose exec backend python manage.py createsuperuser
+```
 
 ## Manual installation
 

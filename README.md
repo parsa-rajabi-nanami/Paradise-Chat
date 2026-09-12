@@ -25,6 +25,17 @@ Use one of these supported paths:
 
 The [installation guide](docs/INSTALLATION.md) lists prerequisites and includes all three paths. The root [.env.example](.env.example) is the canonical environment variable checklist.
 
+## Deploy with Docker
+
+Use the deployment script when a host already runs Nginx, Apache, or aaPanel. The script keeps the Compose gateway on a loopback port, configures the frontend to use same-origin `/api` requests, builds the images, runs migrations, and waits for healthy services.
+
+```bash
+chmod +x scripts/deploy.sh
+scripts/deploy.sh --site-url https://chat.example.com --port 8080
+```
+
+Point the host reverse proxy at `http://127.0.0.1:8080`. For a local-only deployment, omit `--site-url` and open the URL printed by the script. Read the [installation guide](docs/INSTALLATION.md) for first deployment, aaPanel routing, and secret handling.
+
 ## Quick start for development
 
 The development workflow keeps the application processes on your machine and runs PostgreSQL and Redis in Docker. It gives you production-like database and real-time behavior while keeping code reload available.
@@ -74,6 +85,7 @@ For the complete setup, including Windows notes and production configuration, re
 backend/                 Django project, REST API, WebSocket consumers, and tests
 frontend/                React application, Vite build, and client state
 deploy/nginx/            Reverse proxy configuration for the Compose stack
+scripts/deploy.sh        Repeatable Docker deployment and readiness checks
 docs/                    Installation, usage, architecture, API, and operations guides
 docker-compose.yml       PostgreSQL, Redis, backend, frontend, and Nginx services
 ```
@@ -115,7 +127,7 @@ npm run build
 Validate the Compose file before a deployment:
 
 ```bash
-docker compose config
+docker compose --env-file .env config
 ```
 
 ## Documentation map

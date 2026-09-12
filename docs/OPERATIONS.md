@@ -20,7 +20,7 @@ Before deploying a release, complete these checks:
 2. Validate the rendered Compose configuration:
 
    ```bash
-   docker compose config
+   docker compose --env-file .env config
    ```
 
 3. Build the images and run the backend deployment check:
@@ -36,12 +36,27 @@ Before deploying a release, complete these checks:
 
 ## Deploy with Docker Compose
 
+For a repeatable deployment, use the repository script. It creates a protected
+`.env` from the example when needed, preserves a timestamped backup, generates
+missing application secrets, chooses a loopback port that does not collide with
+an existing host proxy, rebuilds the frontend with same-origin API settings,
+and waits for backend/frontend readiness:
+
+```bash
+chmod +x scripts/deploy.sh
+scripts/deploy.sh --site-url https://chat.example.com --port 8080
+```
+
+Use `--rotate-app-secrets` only deliberately; rotating them invalidates existing
+JWTs. The script never removes Docker volumes and refuses to invent a new
+database password for an existing database container.
+
 The backend container runs migrations and collects static files during startup. The frontend receives its Vite values at image build time, so rebuild the frontend after changing any `VITE_*` variable:
 
 ```bash
-docker compose up -d --build
+scripts/deploy.sh --site-url https://chat.example.com --port 8080
 docker compose ps
-curl -fsS http://localhost/healthz
+curl -fsS http://127.0.0.1:8080/healthz
 ```
 
 The health endpoint returns HTTP 200 only when both the database and Redis checks succeed. A failed dependency returns HTTP 503 and should prevent traffic from reaching the release.
@@ -100,23 +115,61 @@ Redis does not need a data restore for application correctness. Restart it, veri
 Check the rendered variables and service logs:
 
 ```bash
-docker compose config
+docker compose --env-file .env config
 docker compose ps
 docker compose logs --tail=100 db redis backend frontend nginx
 ```
 
 Missing values such as `DB_PASSWORD`, `ALLOWED_HOSTS`, or `CORS_ALLOWED_ORIGINS` stop production settings from loading. Set them in the environment used by Compose, then recreate the backend container.
 
+If Compose warns that a variable such as `wchljt` is not set, inspect the names of `.env` values containing a dollar sign:
+
+```bash
+awk -F= '/\$/ {print $1}' .env
+```
+
+Generate application secrets with hexadecimal characters or replace the affected value with a safe value. Do not rotate `DB_PASSWORD` while a database volume contains data unless you also change the PostgreSQL role password deliberately.
+
+### Host port 80 is already in use
+
+The Compose gateway binds to `127.0.0.1:8080` by default. If another service owns port 80, keep that service in place and configure it to reverse proxy to `http://127.0.0.1:8080`:
+
+```bash
+ss -ltnp | grep ':80'
+docker compose ps
+```
+
+Use `APP_PORT` to choose another host port. Do not expose PostgreSQL or Redis publicly to solve an HTTP port conflict.
+
 ### `/healthz` returns 503
 
 Read the response body and backend logs:
 
 ```bash
-curl -i http://localhost/healthz
+curl -i http://127.0.0.1:8080/healthz
 docker compose logs --tail=100 backend db redis
 ```
 
 `database: error` usually means PostgreSQL is unavailable or its credentials do not match the Compose volume. `redis: error` usually means Redis is unavailable or the Redis URL is invalid.
+
+### The browser reports a CORS error for `localhost`
+
+The frontend stores Vite values in the image during the build. A page served from `127.0.0.1:8080` must not call `http://localhost/api` because the browser treats those as different origins. Set the API URL to `/api`, set the WebSocket host to the browser-facing host, and rebuild the frontend:
+
+```bash
+scripts/deploy.sh --site-url http://127.0.0.1:8080 --port 8080
+```
+
+For a public site, use the public origin in `--site-url`. Do not fix this by allowing every CORS origin in production.
+
+### The frontend healthcheck reports connection refused
+
+The frontend healthcheck uses `127.0.0.1` because some hosts resolve `localhost` to IPv6 while the Nginx image listens on IPv4. Confirm the rendered healthcheck and test the container directly:
+
+```bash
+docker compose --env-file .env config | grep -A6 'healthcheck:'
+docker compose exec frontend wget -S -O /dev/null http://127.0.0.1/
+```
 
 ### The browser cannot connect to WebSockets
 
