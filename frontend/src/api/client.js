@@ -59,11 +59,45 @@ const processQueue = (error, token = null) => {
 
 const apiClient = axios.create({
   baseURL: API_URL,
-  timeout: 15000,
-  headers: {
-    'Content-Type': 'application/json'
-  }
+  timeout: 15000
 });
+
+// Keep token refresh in one place so REST retries and WebSocket handshakes
+// share the same concurrency guard and token rotation behavior.
+export const refreshAccessToken = async () => {
+  if (isRefreshing) {
+    return new Promise((resolve, reject) => {
+      failedQueue.push({ resolve, reject });
+    });
+  }
+
+  isRefreshing = true;
+
+  try {
+    const refreshToken = useAuthStore.getState().tokens?.refresh;
+    if (!refreshToken) throw new Error('No refresh token available');
+
+    const response = await axios.post(`${API_URL}/auth/refresh/`, {
+      refresh: refreshToken
+    });
+    const { access, refresh: newRefreshToken } = response.data;
+
+    useAuthStore.getState().setTokens({
+      access,
+      refresh: newRefreshToken || refreshToken
+    });
+
+    processQueue(null, access);
+    return access;
+  } catch (refreshError) {
+    const normalizedRefreshError = normalizeError(refreshError);
+    processQueue(normalizedRefreshError, null);
+    useAuthStore.getState().logout();
+    throw normalizedRefreshError;
+  } finally {
+    isRefreshing = false;
+  }
+};
 
 // Request Interceptor
 apiClient.interceptors.request.use(
@@ -94,45 +128,14 @@ apiClient.interceptors.response.use(
     }
 
     if (error.response?.status === 401 && !originalRequest._retry) {
-      if (isRefreshing) {
-        return new Promise((resolve, reject) => {
-          failedQueue.push({ resolve, reject });
-        })
-          .then(token => {
-            originalRequest.headers.Authorization = `Bearer ${token}`;
-            return apiClient(originalRequest);
-          })
-          .catch(err => Promise.reject(err));
-      }
-
       originalRequest._retry = true;
-      isRefreshing = true;
 
       try {
-        const refreshToken = useAuthStore.getState().tokens?.refresh;
-        if (!refreshToken) throw new Error('No refresh token available');
-
-        const response = await axios.post(`${API_URL}/auth/refresh/`, {
-          refresh: refreshToken
-        });
-
-        const { access, refresh: newRefreshToken } = response.data;
-
-        useAuthStore.getState().setTokens({
-          access,
-          refresh: newRefreshToken || refreshToken
-        });
-
-        processQueue(null, access);
+        const access = await refreshAccessToken();
         originalRequest.headers.Authorization = `Bearer ${access}`;
         return apiClient(originalRequest);
       } catch (refreshError) {
-        const normalizedRefreshError = normalizeError(refreshError);
-        processQueue(normalizedRefreshError, null);
-        useAuthStore.getState().logout();
-        return Promise.reject(normalizedRefreshError);
-      } finally {
-        isRefreshing = false;
+        return Promise.reject(refreshError);
       }
     }
 

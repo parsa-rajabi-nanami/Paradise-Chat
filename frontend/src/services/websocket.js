@@ -1,6 +1,7 @@
 import { useAuthStore } from '../stores/authStore';
 import { useChatStore } from '../stores/chatStore';
 import { chatApi } from '../api/chat';
+import { refreshAccessToken } from '../api/client';
 
 class WebSocketService {
   socket = null;
@@ -13,6 +14,8 @@ class WebSocketService {
 
   statusReconnectAttempts = 0;
   statusReconnectTimeout = null;
+  roomConnectionVersion = 0;
+  statusConnectionVersion = 0;
 
   heartbeatInterval = null;
   messageHandlers = [];
@@ -22,29 +25,41 @@ class WebSocketService {
     return `${protocol}//${host}`;
   }
 
-  connectToRoom(roomId, isReconnecting = false) {
-    if (this.socket?.readyState === WebSocket.OPEN && this.roomId === roomId) {
+  async connectToRoom(roomId, isReconnecting = false) {
+    if (
+      (this.socket?.readyState === WebSocket.OPEN ||
+        this.socket?.readyState === WebSocket.CONNECTING) &&
+      this.roomId === roomId
+    ) {
       return;
     }
 
     this.disconnectFromRoom(!isReconnecting);
     this.roomId = roomId;
+    const connectionVersion = this.roomConnectionVersion;
 
-    const token = useAuthStore.getState().tokens?.access;
+    const token = await this.getAccessToken();
     if (!token) {
-      console.error('No auth token available');
+      return;
+    }
+
+    if (
+      this.roomId !== roomId ||
+      this.roomConnectionVersion !== connectionVersion
+    ) {
       return;
     }
 
     const url = `${this.getWsUrl()}/ws/chat/${roomId}/?token=${encodeURIComponent(token)}`;
-    this.socket = new WebSocket(url);
+    const socket = new WebSocket(url);
+    this.socket = socket;
 
-    this.socket.onopen = () => {
+    socket.onopen = () => {
       console.log(`Connected to room ${roomId}`);
       this.reconnectAttempts = 0;
     };
 
-    this.socket.onmessage = (event) => {
+    socket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
         this.handleMessage(data);
@@ -53,19 +68,21 @@ class WebSocketService {
       }
     };
 
-    this.socket.onclose = (event) => {
+    socket.onclose = (event) => {
+      if (this.socket !== socket) return;
       console.log(`Disconnected from room ${roomId}`, event.code);
       if (!event.wasClean && this.reconnectAttempts < this.maxReconnectAttempts) {
         this.scheduleReconnect();
       }
     };
 
-    this.socket.onerror = (error) => {
+    socket.onerror = (error) => {
       console.error('WebSocket error:', error);
     };
   }
 
   disconnectFromRoom(resetReconnectCount = true) {
+    this.roomConnectionVersion += 1;
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = null;
@@ -99,25 +116,32 @@ class WebSocketService {
     }, delay);
   }
 
-  connectToStatus() {
-    if (this.statusSocket?.readyState === WebSocket.OPEN) {
+  async connectToStatus() {
+    if (
+      this.statusSocket?.readyState === WebSocket.OPEN ||
+      this.statusSocket?.readyState === WebSocket.CONNECTING
+    ) {
       return;
     }
 
-    const token = useAuthStore.getState().tokens?.access;
+    const connectionVersion = this.statusConnectionVersion;
+    const token = await this.getAccessToken();
     if (!token) return;
+
+    if (this.statusConnectionVersion !== connectionVersion) return;
 
     const url = `${this.getWsUrl()}/ws/status/?token=${encodeURIComponent(token)}`;
 
-    this.statusSocket = new WebSocket(url);
+    const socket = new WebSocket(url);
+    this.statusSocket = socket;
 
-    this.statusSocket.onopen = () => {
+    socket.onopen = () => {
       console.log('Connected to status updates');
       this.statusReconnectAttempts = 0;
       this.startHeartbeat();
     };
 
-    this.statusSocket.onmessage = (event) => {
+    socket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'status') {
@@ -128,7 +152,8 @@ class WebSocketService {
       }
     };
 
-    this.statusSocket.onclose = (event) => {
+    socket.onclose = (event) => {
+      if (this.statusSocket !== socket) return;
       console.log('Disconnected from status updates');
       this.stopHeartbeat();
 
@@ -139,12 +164,13 @@ class WebSocketService {
       }
     };
 
-    this.statusSocket.onerror = () => {
+    socket.onerror = () => {
       // onclose performs the reconnect; avoid noisy unhandled browser errors.
     };
   }
 
   disconnectFromStatus() {
+    this.statusConnectionVersion += 1;
     this.stopHeartbeat();
 
     if (this.statusReconnectTimeout) {
@@ -159,6 +185,38 @@ class WebSocketService {
     }
 
     this.statusReconnectAttempts = 0;
+  }
+
+  async getAccessToken() {
+    const access = useAuthStore.getState().tokens?.access;
+    if (!access || !this.isTokenExpiring(access)) return access;
+
+    try {
+      return await refreshAccessToken();
+    } catch {
+      return null;
+    }
+  }
+
+  isTokenExpiring(token) {
+    try {
+      const [, encodedPayload] = token.split('.');
+      if (!encodedPayload) return false;
+
+      const base64Payload = encodedPayload
+        .replace(/-/g, '+')
+        .replace(/_/g, '/');
+      const paddedPayload = base64Payload.padEnd(
+        base64Payload.length + ((4 - (base64Payload.length % 4)) % 4),
+        '='
+      );
+      const payload = JSON.parse(
+        atob(paddedPayload)
+      );
+      return Number(payload.exp) <= Math.floor(Date.now() / 1000) + 30;
+    } catch {
+      return false;
+    }
   }
 
   disconnectAll() {
