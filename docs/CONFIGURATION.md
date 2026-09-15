@@ -57,7 +57,7 @@ These variables control host bindings or process count in `docker-compose.yml`:
 
 Bind database, Redis, and the application gateway to localhost when an external reverse proxy such as aaPanel owns public ports 80 and 443. Set `APP_BIND_ADDRESS=0.0.0.0` only when the host firewall and deployment design require direct public access.
 
-The deployment script chooses an unused port from `8080` through `8099` when a new `.env` does not define `APP_PORT`. It preserves an existing `APP_PORT` on later runs.
+The deployment script chooses an unused port from `8080` through `8099` when a new `.env` does not define `APP_PORT`. It preserves an existing `APP_PORT` on later runs and fails before starting Compose if that port is occupied by another process. Use `--port` or update `.env` to select a different port.
 
 ## Frontend variables
 

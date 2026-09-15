@@ -188,6 +188,9 @@ if [[ -z "$PORT" ]]; then
   fi
   if valid_port "$existing_port"; then
     PORT="$existing_port"
+    if port_in_use "$PORT" && [[ "$existing_nginx_port" != "$PORT" ]]; then
+      die "APP_PORT=$PORT is already in use by another process; choose a free port with --port PORT or update .env"
+    fi
   elif valid_port "$existing_nginx_port"; then
     PORT="$existing_nginx_port"
   else
