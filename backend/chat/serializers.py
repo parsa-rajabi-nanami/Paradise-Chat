@@ -65,6 +65,9 @@ class MessageSerializer(serializers.ModelSerializer):
             return None
         request = self.context.get("request")
         path = reverse("message_attachment", kwargs={"message_id": obj.id})
+        base_url = self.context.get("base_url")
+        if base_url:
+            return f"{base_url.rstrip('/')}{path}"
         return (
             request.build_absolute_uri(path)
             if request

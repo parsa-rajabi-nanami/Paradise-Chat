@@ -67,6 +67,7 @@ Vite reads these values during `npm run build` or the frontend Docker image buil
 | --- | --- | --- |
 | `VITE_API_URL` | `/api` | Axios base URL. Include the `/api` path; use a relative value behind the supplied reverse proxy |
 | `VITE_WS_HOST` | `chat.example.com` | WebSocket host and optional port. Do not include `http://`, `https://`, `ws://`, or `wss://` |
+| `VITE_DEV_BACKEND_URL` | `http://127.0.0.1:8000` | Vite development proxy target for `/api`, `/ws`, and `/healthz`; not used by the production bundle |
 | `VITE_SITE_URL` | `https://chat.example.com` | Public site URL passed to the frontend build. Keep it aligned with the deployed origin |
 | `VITE_SOURCEMAP` | `false` | Set to `true` to generate frontend source maps. Keep them private when enabled |
 

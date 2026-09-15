@@ -6,6 +6,7 @@ from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
+from django.urls import reverse
 from .validators import validate_passphrase
 from rest_framework.exceptions import AuthenticationFailed
 import re
@@ -241,7 +242,15 @@ class UserMinimalSerializer(serializers.ModelSerializer):
 
     def get_avatar(self, obj):
         request = self.context.get("request")
-        return obj.get_avatar_url(request)
+        if request:
+            return obj.get_avatar_url(request)
+
+        base_url = self.context.get("base_url")
+        if base_url and obj.avatar:
+            path = reverse("user_avatar", kwargs={"user_id": obj.id})
+            return f"{base_url.rstrip('/')}{path}"
+
+        return obj.get_avatar_url()
 
 
 class UserDeleteSerializer(serializers.Serializer):

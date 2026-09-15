@@ -5,7 +5,7 @@ WORKDIR /app
 # static bundle. Keep npm from inheriting a production-only install policy.
 ENV NODE_ENV=development
 
-ARG VITE_API_URL=http://localhost/api
+ARG VITE_API_URL=/api
 ARG VITE_WS_HOST=
 ARG VITE_SITE_URL=http://localhost
 ENV VITE_API_URL=$VITE_API_URL \

@@ -344,9 +344,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
             )
 
     def build_absolute_uri(self, relative_url):
-        headers = dict(self.scope.get("headers", {}))
+        scope = getattr(self, "scope", {})
+        headers = dict(scope.get("headers", {}))
         host = headers.get(b"host", b"localhost:8000").decode()
-        scheme = "https" if self.scope.get("scheme") == "https" else "http"
+        scheme = "https" if scope.get("scheme") in {"https", "wss"} else "http"
         return f"{scheme}://{host}{relative_url}"
 
     # Database operations
@@ -417,7 +418,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
         """Serialize message for JSON response."""
         # Keep the WS message payload fields aligned with MessageSerializer,
         # which is also used by the REST broadcast path.
-        return MessageSerializer(message).data
+        return MessageSerializer(
+            message, context={"base_url": self.build_absolute_uri("")}
+        ).data
 
     @database_sync_to_async
     def set_typing_status(self, is_typing):

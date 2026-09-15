@@ -6,6 +6,7 @@ from asgiref.sync import async_to_sync
 from channels.routing import URLRouter
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth import get_user_model
+from django.core.files.base import ContentFile
 from django.test import override_settings
 from django.urls import re_path
 from rest_framework.test import APIClient
@@ -227,6 +228,30 @@ def test_rest_and_ws_message_broadcast_shapes_match(parity_room, monkeypatch):
     assert response.status_code == 201
     rest_event = rest_layer.events[-1][1]
     async_to_sync(_ws_message_for_parity)(user, room, rest_event)
+
+
+def test_websocket_media_urls_use_public_host_and_scheme(
+    user_factory, room_factory, tmp_path
+):
+    user = user_factory("ws_media_user")
+    room = room_factory(owner=user)
+
+    with override_settings(MEDIA_ROOT=tmp_path):
+        user.avatar.save("avatar.png", ContentFile(b"avatar"), save=True)
+        message = Message.objects.create(
+            room=room, sender=user, content="realtime avatar"
+        )
+
+        consumer = CommunicatorChatConsumer()
+        consumer.scope = {
+            "headers": [(b"host", b"127.0.0.1:8081")],
+            "scheme": "wss",
+        }
+        serialized = async_to_sync(consumer.serialize_message)(message)
+
+    assert serialized["sender"]["avatar"] == (
+        f"https://127.0.0.1:8081/api/auth/users/{user.id}/avatar/"
+    )
 
 
 def test_websocket_edit_and_delete_are_bound_to_connected_room(
