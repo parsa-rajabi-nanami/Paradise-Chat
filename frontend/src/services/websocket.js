@@ -21,7 +21,15 @@ class WebSocketService {
   messageHandlers = [];
   getWsUrl() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = import.meta.env.VITE_WS_HOST || window.location.host;
+    const configuredHost = (import.meta.env.VITE_WS_HOST || '').trim();
+    const currentHost = window.location.host;
+    const isLoopbackHost = host =>
+      /^(localhost|127(?:\.\d{1,3}){3}|\[::1\])(?::\d+)?$/i.test(host);
+    const host =
+      configuredHost &&
+      !(isLoopbackHost(configuredHost) && !isLoopbackHost(currentHost))
+        ? configuredHost
+        : currentHost;
     return `${protocol}//${host}`;
   }
 
@@ -307,17 +315,24 @@ class WebSocketService {
     }
 
     if (this.socket?.readyState === WebSocket.OPEN) {
-      this.socket.send(
-        JSON.stringify({
-          type: 'message',
-          content,
-          reply_to: replyTo
-        })
-      );
-      return true;
+      try {
+        this.socket.send(
+          JSON.stringify({
+            type: 'message',
+            content,
+            reply_to: replyTo
+          })
+        );
+        return true;
+      } catch {
+        // Fall through to REST if the socket closed between the state check
+        // and send. The API path keeps text messages usable during reconnects.
+      }
     }
 
-    throw new Error('WebSocket is not connected');
+    const created = await chatApi.sendMessage(targetRoomId, content, replyTo);
+    useChatStore.getState().addMessage(targetRoomId, created);
+    return created;
   }
 
   sendTyping(isTyping) {

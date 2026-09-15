@@ -6,7 +6,7 @@ WORKDIR /app
 ENV NODE_ENV=development
 
 ARG VITE_API_URL=http://localhost/api
-ARG VITE_WS_HOST=localhost
+ARG VITE_WS_HOST=
 ARG VITE_SITE_URL=http://localhost
 ENV VITE_API_URL=$VITE_API_URL \
     VITE_WS_HOST=$VITE_WS_HOST \

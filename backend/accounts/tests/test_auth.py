@@ -1,5 +1,10 @@
+from io import BytesIO
+
 import pytest
 from django.contrib.auth import get_user_model
+from django.core.files.base import ContentFile
+from django.test import override_settings
+from PIL import Image
 from rest_framework.test import APIClient
 
 pytestmark = pytest.mark.django_db
@@ -99,3 +104,24 @@ def test_auth_requires_passphrase_for_login(user_factory):
         format="json",
     )
     assert response.status_code == 401
+
+
+def test_avatar_endpoint_streams_authenticated_profile_image(
+    user_factory, jwt_for, tmp_path
+):
+    user = user_factory("avatar_user")
+    image_data = BytesIO()
+    Image.new("RGB", (1, 1), color="red").save(image_data, format="PNG")
+
+    with override_settings(MEDIA_ROOT=tmp_path):
+        user.avatar.save("avatar.png", ContentFile(image_data.getvalue()), save=True)
+        client = APIClient()
+
+        assert client.get(f"/api/auth/users/{user.id}/avatar/").status_code == 401
+
+        _, access = jwt_for(user)
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+        response = client.get(f"/api/auth/users/{user.id}/avatar/")
+
+    assert response.status_code == 200
+    assert response["Content-Type"] == "image/png"

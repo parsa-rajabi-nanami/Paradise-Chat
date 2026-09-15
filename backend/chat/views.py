@@ -7,7 +7,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import NotFound, ValidationError, PermissionDenied
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from django.http import FileResponse
 import mimetypes
 import os
@@ -382,7 +382,7 @@ class MessageListView(generics.ListCreateAPIView):
     """List messages in a room or send a new message."""
 
     permission_classes = (IsAuthenticated,)
-    parser_classes = (MultiPartParser, FormParser)
+    parser_classes = (JSONParser, MultiPartParser, FormParser)
 
     def get_serializer_class(self):
         if self.request.method == "POST":

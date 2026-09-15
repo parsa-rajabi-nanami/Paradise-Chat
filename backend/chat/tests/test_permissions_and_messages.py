@@ -103,6 +103,21 @@ def test_message_lifecycle_excludes_soft_deleted_and_cleans_attachment(
     assert all(item["id"] != fresh_id for item in listed.json()["results"])
 
 
+def test_text_message_accepts_json_payload(user_factory, room_factory, jwt_for):
+    user = user_factory("json_sender")
+    room = room_factory(owner=user)
+    client = authenticated_client(user, jwt_for)
+
+    response = client.post(
+        f"/api/chat/rooms/{room.id}/messages/",
+        {"content": "text over REST"},
+        format="json",
+    )
+
+    assert response.status_code == 201
+    assert response.json()["content"] == "text over REST"
+
+
 def test_user_cannot_read_or_modify_another_users_room(
     user_factory, room_factory, jwt_for
 ):

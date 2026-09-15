@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react';
 import clsx from 'clsx';
+import apiClient from '../../api/client';
 
 
 const sizes = {
@@ -41,12 +43,42 @@ export function Avatar({
   size = 'md',
   isOnline
 }) {
+  const [imageSrc, setImageSrc] = useState(src || null);
   const initials = getInitials(name);
   const colorClass = getColorFromName(name);
 
+  useEffect(() => {
+    let objectUrl = null;
+    let active = true;
+
+    if (!src || src.startsWith('blob:')) {
+      setImageSrc(src || null);
+      return () => {
+        active = false;
+      };
+    }
+
+    setImageSrc(null);
+    apiClient
+      .get(src, { responseType: 'blob' })
+      .then(({ data }) => {
+        if (!active) return;
+        objectUrl = URL.createObjectURL(data);
+        setImageSrc(objectUrl);
+      })
+      .catch(() => {
+        if (active) setImageSrc(null);
+      });
+
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [src]);
+
   return (
     <div className="relative inline-block flex-shrink-0">
-      {src ? <img src={src} alt={name} className={clsx('rounded-full object-cover', sizes[size])} /> : <div className={clsx('avatar bg-gradient-to-br', colorClass, sizes[size])}>
+      {imageSrc ? <img src={imageSrc} alt={name} className={clsx('rounded-full object-cover', sizes[size])} onError={() => setImageSrc(null)} /> : <div className={clsx('avatar bg-gradient-to-br', colorClass, sizes[size])}>
         {initials}
       </div>}
 
