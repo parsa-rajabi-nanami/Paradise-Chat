@@ -8,6 +8,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.urls import reverse
 from .validators import validate_passphrase
+from .avatar_processing import process_avatar
 from rest_framework.exceptions import AuthenticationFailed
 import re
 
@@ -183,6 +184,41 @@ class UserUpdateSerializer(serializers.ModelSerializer):
             )
         return value
 
+    def update(self, instance, validated_data):
+        avatar = validated_data.pop("avatar", serializers.empty)
+        old_avatar_name = instance.avatar.name if instance.avatar else None
+        old_thumbnail_name = (
+            instance.avatar_thumbnail.name if instance.avatar_thumbnail else None
+        )
+
+        if avatar is not serializers.empty:
+            if avatar:
+                normalized_avatar, thumbnail = process_avatar(avatar)
+                validated_data["avatar"] = normalized_avatar
+                validated_data["avatar_thumbnail"] = thumbnail
+            else:
+                validated_data["avatar"] = None
+                validated_data["avatar_thumbnail"] = None
+
+        updated = super().update(instance, validated_data)
+
+        if avatar is not serializers.empty and avatar:
+            storage = instance.avatar.storage
+            if old_avatar_name and old_avatar_name != instance.avatar.name:
+                storage.delete(old_avatar_name)
+            if (
+                old_thumbnail_name
+                and old_thumbnail_name != instance.avatar_thumbnail.name
+            ):
+                storage.delete(old_thumbnail_name)
+        elif avatar is not serializers.empty:
+            if old_avatar_name:
+                instance.avatar.storage.delete(old_avatar_name)
+            if old_thumbnail_name:
+                instance.avatar_thumbnail.storage.delete(old_thumbnail_name)
+
+        return updated
+
 
 class PasswordChangeSerializer(serializers.Serializer):
     """Serializer for password change."""
@@ -243,14 +279,15 @@ class UserMinimalSerializer(serializers.ModelSerializer):
     def get_avatar(self, obj):
         request = self.context.get("request")
         if request:
-            return obj.get_avatar_url(request)
+            return obj.get_avatar_url(request, thumbnail=True)
 
         base_url = self.context.get("base_url")
         if base_url and obj.avatar:
             path = reverse("user_avatar", kwargs={"user_id": obj.id})
-            return f"{base_url.rstrip('/')}{path}"
+            suffix = "?size=thumbnail" if obj.avatar_thumbnail else ""
+            return f"{base_url.rstrip('/')}{path}{suffix}"
 
-        return obj.get_avatar_url()
+        return obj.get_avatar_url(thumbnail=True)
 
 
 class UserDeleteSerializer(serializers.Serializer):

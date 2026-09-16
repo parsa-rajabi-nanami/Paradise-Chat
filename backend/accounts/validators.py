@@ -1,7 +1,12 @@
 from rest_framework import serializers
 from django.core.exceptions import ValidationError
-from PIL import Image
-import os
+from PIL import Image, UnidentifiedImageError
+
+from .avatar_processing import (
+    ALLOWED_IMAGE_FORMATS,
+    MAX_AVATAR_DIMENSION,
+    MAX_AVATAR_UPLOAD_SIZE,
+)
 
 
 def validate_passphrase(value: str):
@@ -18,31 +23,30 @@ def validate_passphrase(value: str):
 
 
 def validate_avatar(file):
-    """Validate avatar image (type, size, dimensions)."""
+    """Validate avatar content, not only the client-supplied filename."""
 
     if not file:
         return file
 
-    max_size = 0.5 * 1024 * 1024  # 500KB
-    allowed_extensions = {"jpg", "jpeg", "png", "webp"}
-
-    if file.size > max_size:
-        raise ValidationError("Avatar must be smaller than 500KB.")
-
-    ext = os.path.splitext(file.name)[1].lower().replace(".", "")
-    if ext not in allowed_extensions:
-        raise ValidationError("Only JPG, JPEG, PNG, or WEBP images are allowed.")
-
     try:
+        if file.size > MAX_AVATAR_UPLOAD_SIZE:
+            raise ValidationError("Avatar must be smaller than 5MB.")
+
+        file.seek(0)
         img = Image.open(file)
-
-        width, height = img.size
-        if width > 2000 or height > 2000:
-            raise ValidationError("Avatar dimensions cannot exceed 2000x2000.")
-
+        if img.format not in ALLOWED_IMAGE_FORMATS:
+            raise ValidationError("Only JPEG, PNG, or WEBP images are allowed.")
+        if max(img.size) > MAX_AVATAR_DIMENSION:
+            raise ValidationError("Avatar dimensions cannot exceed 4096x4096.")
         img.verify()
         file.seek(0)
-    except Exception:
+    except (
+        Image.DecompressionBombError,
+        UnidentifiedImageError,
+        OSError,
+        ValueError,
+        SyntaxError,
+    ):
         raise ValidationError("Uploaded file is not a valid image.")
 
     return file

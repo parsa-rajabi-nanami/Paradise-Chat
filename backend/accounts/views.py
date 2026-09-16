@@ -6,15 +6,14 @@ from rest_framework import generics, status, throttling
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django.db import transaction
-from django.http import FileResponse
-import mimetypes
 from django.shortcuts import get_object_or_404
+import mimetypes
 from .serializers import (
     CustomTokenObtainPairSerializer,
     UserRegistrationSerializer,
@@ -27,6 +26,8 @@ from .serializers import (
 from chat.models import ChatRoom, Message, RoomParticipant
 from .models import UserPresence
 from chat.config import get_chat_configuration
+from chat.throttles import FileUploadRateThrottle
+from chat_project.media import protected_file_response
 
 User = get_user_model()
 
@@ -37,6 +38,13 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
     throttle_classes = [throttling.ScopedRateThrottle]
     throttle_scope = "login"
+
+
+class CustomTokenRefreshView(TokenRefreshView):
+    """Rotate refresh tokens with a separate anonymous abuse limit."""
+
+    throttle_classes = [throttling.ScopedRateThrottle]
+    throttle_scope = "token_refresh"
 
 
 class RegisterView(generics.CreateAPIView):
@@ -102,6 +110,12 @@ class ProfileView(generics.RetrieveUpdateAPIView):
     """User profile view and update endpoint."""
 
     permission_classes = (IsAuthenticated,)
+
+    def get_throttles(self):
+        throttles = super().get_throttles()
+        if self.request.method in ("PUT", "PATCH"):
+            throttles.append(FileUploadRateThrottle())
+        return throttles
 
     def get_serializer_class(self):
         if self.request.method in ["PUT", "PATCH"]:
@@ -169,15 +183,18 @@ class UserAvatarView(APIView):
         user = get_object_or_404(
             User.objects.filter(is_active=True, is_deleted=False), id=user_id
         )
-        if not user.avatar:
+        field = user.avatar
+        if request.query_params.get("size") == "thumbnail" and user.avatar_thumbnail:
+            field = user.avatar_thumbnail
+        if not field:
             return Response(status=status.HTTP_404_NOT_FOUND)
-        user.avatar.open("rb")
-        response = FileResponse(
-            user.avatar,
-            content_type=mimetypes.guess_type(user.avatar.name)[0],
+        response = protected_file_response(
+            field,
+            content_type=mimetypes.guess_type(field.name)[0] or "image/webp",
         )
         response["Content-Disposition"] = "inline"
         response["X-Content-Type-Options"] = "nosniff"
+        response["Cache-Control"] = "private, max-age=300"
         return response
 
 
@@ -280,6 +297,10 @@ class DeleteAccountView(APIView):
             user.email = f"deleted_{user.id}@deleted.local"
         if user.avatar:
             user.avatar.delete(save=False)
+        if user.avatar_thumbnail:
+            user.avatar_thumbnail.delete(save=False)
+        user.avatar = None
+        user.avatar_thumbnail = None
         user.save()
 
         return Response(

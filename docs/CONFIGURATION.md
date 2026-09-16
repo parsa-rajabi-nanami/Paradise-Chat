@@ -23,7 +23,7 @@ The following variables are read by Django or the Compose backend service:
 | `DJANGO_ENV` | `development` | Production: yes | Selects the settings package |
 | `DJANGO_SECRET_KEY` | Development fallback | Production: yes | Django signing and security secret. Use a random value |
 | `JWT_SIGNING_KEY` | Django secret fallback | Production: yes | Separate signing key for access and refresh JWTs |
-| `DJANGO_BASE_URL` | `http://127.0.0.1:8000` | No | Base URL used when serializers build absolute URLs without a request |
+| `DJANGO_BASE_URL` | Development-only local URL | Production: yes | Public absolute URL used when serializers build URLs without a request; production rejects a missing or non-http(s) value |
 | `DB_NAME` | `chat_db` | Production: no | PostgreSQL database name |
 | `DB_USER` | `chat_user` | Production: no | PostgreSQL role |
 | `DB_PASSWORD` | Development fallback | Production: yes | PostgreSQL role password |
@@ -38,10 +38,19 @@ The following variables are read by Django or the Compose backend service:
 | `ACCESS_TOKEN_MINUTES` | `30` development, `15` production | No | Access JWT lifetime and WebSocket query-token exposure window |
 | `LOGIN_THROTTLE_RATE` | `10/minute` | No | Login attempts per throttle window |
 | `REGISTER_THROTTLE_RATE` | `5/hour` | No | Registration attempts per throttle window |
+| `REFRESH_THROTTLE_RATE` | `30/hour` | No | Anonymous refresh-token rotations per throttle window |
+| `UPLOAD_THROTTLE_RATE` | `60/hour` | No | Authenticated profile, room-avatar, and message-upload mutations per throttle window |
 | `WS_RATE_LIMIT_WINDOW_SECONDS` | `10` | No | Inbound WebSocket rate-limit window |
 | `WS_RATE_LIMIT_MESSAGES` | `30` | No | Maximum inbound WebSocket frames in that window |
+| `MEDIA_STORAGE` | `local` | No | `local` uses the persisted Compose volume; `s3` uses django-storages with a private S3-compatible bucket |
+| `MEDIA_ROOT` | `backend/media` | No | Local media directory. In Compose this is `/app/media` and is backed by `media_data` |
+| `USE_NGINX_ACCEL_REDIRECT` | `True` in production local storage | No | Lets authorized Django media responses hand local files to Nginx through an internal location |
+| `AWS_STORAGE_BUCKET_NAME` | — | S3 only | Private bucket name |
+| `AWS_S3_REGION_NAME` | — | No | S3 region, when required by the provider |
+| `AWS_S3_ENDPOINT_URL` | — | No | S3-compatible endpoint such as MinIO; leave empty for AWS |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | — | Provider-dependent | Credentials or use the provider's workload/IAM identity |
 
-Production fails closed when `DJANGO_SECRET_KEY`, `JWT_SIGNING_KEY`, `DB_PASSWORD`, `REDIS_URL`, `REDIS_CACHE_URL`, `ALLOWED_HOSTS`, or `CORS_ALLOWED_ORIGINS` is missing. Compose supplies internal `DB_HOST`, `DB_PORT`, `REDIS_URL`, and `REDIS_CACHE_URL` values to the backend service.
+Production fails closed when `DJANGO_SECRET_KEY`, `JWT_SIGNING_KEY`, `DJANGO_BASE_URL`, `DB_PASSWORD`, `REDIS_URL`, `REDIS_CACHE_URL`, `ALLOWED_HOSTS`, or `CORS_ALLOWED_ORIGINS` is missing. Compose supplies internal `DB_HOST`, `DB_PORT`, `REDIS_URL`, and `REDIS_CACHE_URL` values to the backend service.
 
 ## Compose-only variables
 
@@ -106,4 +115,26 @@ Create a superuser with `python manage.py createsuperuser` or the equivalent Com
 
 The backend uses rotating refresh tokens with blacklist-after-rotation. Access tokens last 30 minutes in development and 15 minutes in production by default. The browser sends the access token in the WebSocket `token` query parameter because browser WebSocket APIs cannot set an Authorization header.
 
-Message attachments are limited to 10 MB by the validator and accept JPEG, PNG, WebP, PDF, plain text, Microsoft Office document types, and ZIP files. Script, executable, HTML, SVG, and other unsafe extensions are rejected. Avatars accept JPG, JPEG, PNG, and WebP files up to 500 KB with dimensions up to 2,000 by 2,000 pixels.
+Message attachments are limited to 10 MB by the validator and accept JPEG, PNG, WebP, PDF, plain text, Microsoft Office document types, and ZIP files. Script, executable, HTML, SVG, and other unsafe extensions are rejected. Avatar inputs accept JPEG, PNG, and WebP content up to 5 MB with dimensions up to 4,096 by 4,096 pixels, then are normalized to the smaller WebP sizes described below.
+
+Avatar uploads are normalized server-side regardless of the client: Pillow
+verifies the image content, applies EXIF orientation, center-crops to a square,
+re-encodes the main image as a 512px WebP, and stores a 96px WebP thumbnail for
+list views. The browser also offers a square drag/zoom crop step for a better
+preview, but it is not a security boundary.
+
+## Media storage and serving
+
+With `MEDIA_STORAGE=local`, the Compose deployment mounts `media_data` into
+both the backend and gateway. Django authorizes `/api/auth/users/.../avatar/`,
+`/api/chat/.../attachment/`, and room-avatar requests; for local storage it
+returns an internal `X-Accel-Redirect`, and Nginx reads the file from the
+persisted volume with private caching and `nosniff`. Direct `/media/` requests
+remain disabled, so guessing an opaque filename cannot bypass room permissions.
+
+For a multi-node or object-storage deployment, set `MEDIA_STORAGE=s3`, create a
+private bucket, and provide the bucket and endpoint variables above. Keep
+`AWS_QUERYSTRING_AUTH` enabled (the production settings do this) and grant the
+application only the bucket permissions it needs. The API endpoints continue
+to authorize access and stream from the storage abstraction, so no public
+bucket policy is required.

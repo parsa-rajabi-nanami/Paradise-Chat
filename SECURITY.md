@@ -32,10 +32,11 @@ Once the vulnerability has been confirmed, a fix will be developed and released 
 - Production `ALLOWED_HOSTS` and `CORS_ALLOWED_ORIGINS` are explicit,
   non-empty allow-lists. HSTS, secure cookies, SSL redirect, and security
   headers remain enabled.
-- Message and avatar uploads use extension/content validation, a 10 MB message
-  limit, generated storage names, and Django storage cleanup. Nginx does not
-  serve `/media/`; attachments are streamed through an authenticated room
-  participant endpoint.
+- Message and avatar uploads use content validation, 10 MB/5 MB request limits,
+  generated storage names, Pillow normalization for avatars, and Django
+  storage cleanup. Nginx does not expose `/media/`; authorized local-media
+  responses use an internal accelerated path, while attachments are still
+  gated by the authenticated room participant endpoint.
 
 ### WebSocket token exposure decision
 

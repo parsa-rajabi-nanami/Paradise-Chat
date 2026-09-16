@@ -8,15 +8,18 @@ from django.db import models
 from django.utils import timezone
 from django.conf import settings
 from django.urls import reverse
-import os
 import uuid
 from .validators import validate_avatar
 
 
 def avatar_upload_to(instance, filename):
     """Generate an opaque avatar filename; never persist a client filename."""
-    extension = os.path.splitext(filename)[1].lower()
-    return f"avatars/{uuid.uuid4().hex}{extension}"
+    return f"avatars/{uuid.uuid4().hex}.webp"
+
+
+def avatar_thumbnail_upload_to(instance, filename):
+    """Generate an opaque filename for the small avatar list thumbnail."""
+    return f"avatar_thumbnails/{uuid.uuid4().hex}.webp"
 
 
 class UserManager(BaseUserManager):
@@ -67,6 +70,12 @@ class User(AbstractUser):
         null=True,
         blank=True,
         validators=[validate_avatar],
+    )
+    avatar_thumbnail = models.ImageField(
+        upload_to=avatar_thumbnail_upload_to,
+        null=True,
+        blank=True,
+        editable=False,
     )
     bio = models.TextField(max_length=500, blank=True)
 
@@ -126,10 +135,12 @@ class User(AbstractUser):
     def has_passphrase(self) -> bool:
         return bool(self.passphrase)
 
-    def get_avatar_url(self, request=None):
+    def get_avatar_url(self, request=None, thumbnail=False):
         if not self.avatar:
             return None
         path = reverse("user_avatar", kwargs={"user_id": self.id})
+        if thumbnail and self.avatar_thumbnail:
+            path = f"{path}?size=thumbnail"
         if request:
             return request.build_absolute_uri(path)
         return f"{settings.BASE_URL}{path}"

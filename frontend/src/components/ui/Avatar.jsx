@@ -78,7 +78,7 @@ export function Avatar({
 
   return (
     <div className="relative inline-block flex-shrink-0">
-      {imageSrc ? <img src={imageSrc} alt={name} className={clsx('rounded-full object-cover', sizes[size])} onError={() => setImageSrc(null)} /> : <div className={clsx('avatar bg-gradient-to-br', colorClass, sizes[size])}>
+      {imageSrc ? <img src={imageSrc} alt={name} loading="lazy" decoding="async" className={clsx('rounded-full object-cover', sizes[size])} onError={() => setImageSrc(null)} /> : <div className={clsx('avatar bg-gradient-to-br', colorClass, sizes[size])}>
         {initials}
       </div>}
 

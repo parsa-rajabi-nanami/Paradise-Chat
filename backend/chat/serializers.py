@@ -9,6 +9,7 @@ from accounts.serializers import UserMinimalSerializer
 from django.conf import settings
 from .models import ChatRoom, RoomParticipant, Message
 from .config import get_chat_configuration
+from accounts.avatar_processing import process_avatar
 
 User = get_user_model()
 
@@ -61,7 +62,7 @@ class MessageSerializer(serializers.ModelSerializer):
         }
 
     def get_attachment(self, obj):
-        if not obj.attachment or not obj.attachment.name:
+        if obj.is_deleted or not obj.attachment or not obj.attachment.name:
             return None
         request = self.context.get("request")
         path = reverse("message_attachment", kwargs={"message_id": obj.id})
@@ -421,3 +422,19 @@ class ChatRoomUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = ChatRoom
         fields = ("name", "description", "avatar")
+
+    def update(self, instance, validated_data):
+        avatar = validated_data.pop("avatar", serializers.empty)
+        old_avatar_name = instance.avatar.name if instance.avatar else None
+        if avatar is not serializers.empty:
+            if avatar:
+                normalized_avatar, _ = process_avatar(avatar)
+                validated_data["avatar"] = normalized_avatar
+            else:
+                validated_data["avatar"] = None
+
+        updated = super().update(instance, validated_data)
+        if avatar is not serializers.empty:
+            if old_avatar_name and old_avatar_name != instance.avatar.name:
+                instance.avatar.storage.delete(old_avatar_name)
+        return updated

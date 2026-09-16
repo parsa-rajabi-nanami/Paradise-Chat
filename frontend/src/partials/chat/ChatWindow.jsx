@@ -13,6 +13,7 @@ export function ChatWindow({ room }) {
   const roomMessages = useChatStore((state) => (roomId ? state.messages[roomId] || [] : []));
   const roomTypingUsers = useChatStore((state) => (roomId ? state.typingUsers[roomId] || [] : []));
   const currentUser = useAuthStore((state) => state.user);
+  const socketStatus = useChatStore((state) => state.socketStatus);
 
   // Memoize filtering to avoid extra renders when current user state updates
   const othersTyping = useMemo(
@@ -31,6 +32,12 @@ export function ChatWindow({ room }) {
   return (
     <div className="flex-1 flex flex-col h-full min-h-0 bg-pattern-1 text-[var(--color-text)] relative">
       <ChatHeader room={room} />
+
+      {socketStatus !== 'connected' && (
+        <div className="border-b border-amber-300 bg-amber-50 px-4 py-2 text-xs text-amber-900" role="status">
+          {socketStatus === 'error' ? 'Live connection failed. Retrying…' : 'Reconnecting to live updates…'}
+        </div>
+      )}
 
       <main className="flex-1 flex flex-col min-h-0 relative overflow-hidden border-t border-[var(--color-border)]">
         <MessageList messages={roomMessages} room={room} />

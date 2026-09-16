@@ -3,7 +3,8 @@
 from .base import *
 
 DEBUG = False
-SECRET_KEY = "test-only-secret-key"
+SECRET_KEY = "test-only-secret-key-with-enough-entropy-for-jwt-tests-123456"
+SIMPLE_JWT["SIGNING_KEY"] = SECRET_KEY
 ALLOWED_HOSTS = ["testserver", "localhost"]
 CORS_ALLOWED_ORIGINS = ["http://localhost:3000"]
 MIDDLEWARE = [

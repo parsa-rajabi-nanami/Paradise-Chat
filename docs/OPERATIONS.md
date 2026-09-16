@@ -8,7 +8,7 @@ The application has three durable or ephemeral storage boundaries:
 
 - **PostgreSQL** stores users, rooms, participants, messages, read receipts, migrations, and refresh-token blacklist rows
 - **Redis** stores Django cache entries and Channels group coordination. Redis loss should trigger reconnects and cache misses, not message loss
-- **Media storage** stores avatars and message attachments. The default local backend uses the `media/` directory or the Compose `media_data` volume
+- **Media storage** stores avatars and message attachments. The default local backend uses the `media/` directory or the Compose `media_data` volume; S3-compatible private storage is available through `MEDIA_STORAGE=s3`
 
 The Compose Redis service uses database 0 for Channels and database 1 for Django cache. It limits memory to 256 MB and uses `allkeys-lru`. Production should monitor memory and evictions before increasing traffic.
 
@@ -197,11 +197,11 @@ Take a backup, identify the failed migration in the logs, and repair the forward
 
 ### Attachments or avatars return 404
 
-The production Nginx configuration intentionally returns 404 for direct `/media/` requests. Use the authenticated attachment or avatar endpoint through the application, and verify that the backend and Nginx containers share the `media_data` volume in the Compose deployment.
+The production Nginx configuration intentionally returns 404 for direct `/media/` requests. Use the authenticated attachment or avatar endpoint through the application, and verify that the backend and Nginx containers share the `media_data` volume in a local deployment. If `USE_NGINX_ACCEL_REDIRECT=True`, also verify the `/protected-media/` internal location and the shared mount. For S3, verify the bucket, endpoint, credentials/IAM role, and that the bucket is private.
 
 ### Login or registration is throttled
 
-The default limits are `10/minute` for login and `5/hour` for registration. Wait for the window to expire or review `LOGIN_THROTTLE_RATE` and `REGISTER_THROTTLE_RATE` in a controlled deployment. Do not disable throttling on a public instance without an alternative abuse control.
+The default limits are `10/minute` for login, `5/hour` for registration, `30/hour` for refresh-token rotation, and `60/hour` for authenticated upload mutations. Wait for the window to expire or review `LOGIN_THROTTLE_RATE`, `REGISTER_THROTTLE_RATE`, `REFRESH_THROTTLE_RATE`, and `UPLOAD_THROTTLE_RATE` in a controlled deployment. Do not disable throttling on a public instance without an alternative abuse control.
 
 ## Monitoring essentials
 

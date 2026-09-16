@@ -21,7 +21,10 @@ class WebSocketService {
   messageHandlers = [];
   getWsUrl() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const configuredHost = (import.meta.env.VITE_WS_HOST || '').trim();
+    const configuredHost = (import.meta.env.VITE_WS_HOST || '')
+      .trim()
+      .replace(/^wss?:\/\//, '')
+      .replace(/\/$/, '');
     const currentHost = window.location.host;
     const isLoopbackHost = host =>
       /^(localhost|127(?:\.\d{1,3}){3}|\[::1\])(?::\d+)?$/i.test(host);
@@ -44,6 +47,7 @@ class WebSocketService {
 
     this.disconnectFromRoom(!isReconnecting);
     this.roomId = roomId;
+    useChatStore.getState().setSocketStatus('connecting');
     const connectionVersion = this.roomConnectionVersion;
 
     const token = await this.getAccessToken();
@@ -64,6 +68,7 @@ class WebSocketService {
 
     socket.onopen = () => {
       console.log(`Connected to room ${roomId}`);
+      useChatStore.getState().setSocketStatus('connected');
       this.reconnectAttempts = 0;
     };
 
@@ -79,6 +84,7 @@ class WebSocketService {
     socket.onclose = (event) => {
       if (this.socket !== socket) return;
       console.log(`Disconnected from room ${roomId}`, event.code);
+      useChatStore.getState().setSocketStatus('disconnected');
       if (!event.wasClean && this.reconnectAttempts < this.maxReconnectAttempts) {
         this.scheduleReconnect();
       }
@@ -86,6 +92,7 @@ class WebSocketService {
 
     socket.onerror = (error) => {
       console.error('WebSocket error:', error);
+      useChatStore.getState().setSocketStatus('error');
     };
   }
 
@@ -223,7 +230,7 @@ class WebSocketService {
       );
       return Number(payload.exp) <= Math.floor(Date.now() / 1000) + 30;
     } catch {
-      return false;
+      return true;
     }
   }
 

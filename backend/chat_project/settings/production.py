@@ -4,6 +4,7 @@ Production settings for chat_project.
 
 import os
 from datetime import timedelta
+from urllib.parse import urlparse
 from django.core.exceptions import ImproperlyConfigured
 from .base import *
 
@@ -22,6 +23,13 @@ def require_production_secret(name):
 
 DEBUG = False
 SECRET_KEY = require_production_secret("DJANGO_SECRET_KEY")
+
+BASE_URL = os.environ.get("DJANGO_BASE_URL", "").rstrip("/")
+parsed_base_url = urlparse(BASE_URL)
+if parsed_base_url.scheme not in {"http", "https"} or not parsed_base_url.netloc:
+    raise ImproperlyConfigured(
+        "DJANGO_BASE_URL must be an absolute http(s) URL in production."
+    )
 
 ALLOWED_HOSTS = [
     host.strip()
@@ -56,6 +64,7 @@ if not CORS_ALLOWED_ORIGINS:
         "CORS_ALLOWED_ORIGINS must contain at least one origin in production."
     )
 CORS_ALLOW_CREDENTIALS = True
+CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
 
 # Query-string WebSocket tokens have a shorter production lifetime. Clients
 # refresh through the existing REST refresh endpoint.
@@ -78,7 +87,8 @@ DATABASES = {
         "PASSWORD": os.environ.get("DB_PASSWORD"),
         "HOST": os.environ.get("DB_HOST", "localhost"),
         "PORT": os.environ.get("DB_PORT", "5432"),
-        "CONN_MAX_AGE": 60,
+        "CONN_MAX_AGE": int(os.environ.get("DB_CONN_MAX_AGE", "60")),
+        "CONN_HEALTH_CHECKS": True,
         "OPTIONS": {
             "connect_timeout": 10,
         },
@@ -114,3 +124,34 @@ CACHES = {
 
 # Logging for production
 LOGGING["root"]["handlers"] = ["console"]
+
+MEDIA_STORAGE = os.environ.get("MEDIA_STORAGE", "local").lower()
+if MEDIA_STORAGE == "local":
+    USE_NGINX_ACCEL_REDIRECT = (
+        os.environ.get("USE_NGINX_ACCEL_REDIRECT", "True") == "True"
+    )
+elif MEDIA_STORAGE == "s3":
+    AWS_STORAGE_BUCKET_NAME = os.environ.get("AWS_STORAGE_BUCKET_NAME")
+    if not AWS_STORAGE_BUCKET_NAME:
+        raise ImproperlyConfigured(
+            "AWS_STORAGE_BUCKET_NAME must be set when MEDIA_STORAGE=s3."
+        )
+    AWS_S3_REGION_NAME = os.environ.get("AWS_S3_REGION_NAME") or None
+    AWS_S3_ENDPOINT_URL = os.environ.get("AWS_S3_ENDPOINT_URL") or None
+    AWS_S3_ADDRESSING_STYLE = os.environ.get("AWS_S3_ADDRESSING_STYLE", "auto")
+    AWS_QUERYSTRING_AUTH = True
+    AWS_DEFAULT_ACL = None
+    STORAGES["default"] = {
+        "BACKEND": "storages.backends.s3.S3Storage",
+        "OPTIONS": {
+            "bucket_name": AWS_STORAGE_BUCKET_NAME,
+            "region_name": AWS_S3_REGION_NAME,
+            "endpoint_url": AWS_S3_ENDPOINT_URL,
+            "addressing_style": AWS_S3_ADDRESSING_STYLE,
+            "querystring_auth": AWS_QUERYSTRING_AUTH,
+            "default_acl": AWS_DEFAULT_ACL,
+            "file_overwrite": False,
+        },
+    }
+else:
+    raise ImproperlyConfigured("MEDIA_STORAGE must be either local or s3.")

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useChatStore } from "../stores/chatStore";
 import { Avatar } from "../components/ui/Avatar";
+import { AvatarCropper } from "../components/AvatarCropper";
 import { InputField } from "../components/ui/InputField";
 import { TextAreaField } from "../components/ui/TextAreaField";
 import { ArrowLeft, Save, Loader2, Users, Search, UserPlus } from "lucide-react";
@@ -20,6 +21,7 @@ export function ChatSettings() {
   const [description, setDescription] = useState("");
   const [previewAvatar, setPreviewAvatar] = useState(null);
   const [avatar, setAvatar] = useState(null);
+  const [cropSource, setCropSource] = useState(null);
   const [saving, setSaving] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -85,9 +87,25 @@ export function ChatSettings() {
       toast.error("Only image files are allowed");
       return;
     }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Avatar must be smaller than 5MB");
+      return;
+    }
 
+    setCropSource(URL.createObjectURL(file));
+  };
+
+  const handleCropComplete = async (file) => {
+    if (previewAvatar?.startsWith("blob:")) URL.revokeObjectURL(previewAvatar);
     setAvatar(file);
     setPreviewAvatar(URL.createObjectURL(file));
+    if (cropSource) URL.revokeObjectURL(cropSource);
+    setCropSource(null);
+  };
+
+  const cancelCrop = () => {
+    if (cropSource) URL.revokeObjectURL(cropSource);
+    setCropSource(null);
   };
 
   const handleSubmit = async (e) => {
@@ -101,6 +119,7 @@ export function ChatSettings() {
       if (avatar) formData.append("avatar", avatar);
 
       await updateRoom(roomId, formData);
+      setAvatar(null);
       toast.success("Group updated successfully");
     } catch {
       toast.error("Failed to update group");
@@ -237,6 +256,9 @@ export function ChatSettings() {
             <span>{saving ? "Saving..." : "Save Changes"}</span>
           </button>
         </form>
+        {cropSource && (
+          <AvatarCropper imageSrc={cropSource} onCancel={cancelCrop} onComplete={handleCropComplete} />
+        )}
       </div>
     </div>
   );

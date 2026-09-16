@@ -20,6 +20,24 @@ os.environ["DJANGO_ALLOW_ASYNC_UNSAFE"] = "true"
 pytestmark = pytest.mark.django_db(transaction=True)
 
 
+@pytest.fixture(autouse=True)
+def disable_channels_connection_cleanup_for_communicator(monkeypatch):
+    """Avoid Channels' sync bridge deadlock under pytest's async loop.
+
+    WebsocketCommunicator already patches the synchronous cleanup callback, but
+    Channels 4.3 still invokes it through ``sync_to_async``. That bridge can
+    deadlock in this test harness; production ASGI execution is unaffected.
+    The consumer subclasses below explicitly call their wrapped sync function
+    for deterministic database fixtures; this patch must not be copied into
+    production code.
+    """
+
+    async def no_op():
+        return None
+
+    monkeypatch.setattr("channels.consumer.aclose_old_connections", no_op)
+
+
 class CommunicatorChatConsumer(ChatConsumer):
     """Use committed worker-thread calls while retaining production handlers."""
 

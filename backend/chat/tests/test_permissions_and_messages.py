@@ -103,6 +103,42 @@ def test_message_lifecycle_excludes_soft_deleted_and_cleans_attachment(
     assert all(item["id"] != fresh_id for item in listed.json()["results"])
 
 
+def test_soft_deleting_message_removes_attachment_and_hides_url(
+    user_factory, room_factory, jwt_for, tmp_path
+):
+    user = user_factory("attachment_delete")
+    room = room_factory(owner=user)
+    client = authenticated_client(user, jwt_for)
+    attachment = ContentFile(b"plain text", name="note.txt")
+
+    with override_settings(MEDIA_ROOT=tmp_path):
+        created = client.post(
+            f"/api/chat/rooms/{room.id}/messages/",
+            {"content": "remove me", "attachment": attachment},
+            format="multipart",
+        )
+        assert created.status_code == 201
+        message = Message.objects.get(id=created.json()["id"])
+        stored_path = tmp_path / message.attachment.name
+        assert stored_path.exists()
+
+        assert (
+            client.delete(
+                f"/api/chat/rooms/{room.id}/messages/{message.id}/"
+            ).status_code
+            == 204
+        )
+        assert not stored_path.exists()
+        message.refresh_from_db()
+        assert not message.attachment.name
+        assert (
+            client.get(
+                f"/api/chat/rooms/{room.id}/messages/{message.id}/attachment/"
+            ).status_code
+            == 404
+        )
+
+
 def test_text_message_accepts_json_payload(user_factory, room_factory, jwt_for):
     user = user_factory("json_sender")
     room = room_factory(owner=user)

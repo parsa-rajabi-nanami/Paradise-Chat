@@ -104,6 +104,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
     async def receive(self, text_data):
         """Handle incoming WebSocket messages."""
+        if not await self.refresh_authenticated_user():
+            return
+
         if not self._allow_incoming_frame():
             await self.send(
                 text_data=json.dumps(
@@ -138,6 +141,21 @@ class ChatConsumer(AsyncWebsocketConsumer):
             logger.error("Invalid JSON received")
         except Exception as e:
             logger.error(f"Error handling message: {e}")
+
+    async def refresh_authenticated_user(self):
+        """Revalidate middleware-provided JWTs during long-lived sessions."""
+        token = self.scope.get("auth_token")
+        if not token:
+            return not self.user.is_anonymous
+
+        from .middleware import get_user_from_token
+
+        user = await get_user_from_token(token)
+        if user.is_anonymous:
+            await self.close(code=4001)
+            return False
+        self.user = user
+        return True
 
     def _allow_incoming_frame(self):
         """Apply a small sliding-window guard to this authenticated connection."""
@@ -347,7 +365,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
         scope = getattr(self, "scope", {})
         headers = dict(scope.get("headers", {}))
         host = headers.get(b"host", b"localhost:8000").decode()
-        scheme = "https" if scope.get("scheme") in {"https", "wss"} else "http"
+        forwarded_proto = headers.get(b"x-forwarded-proto", b"").decode()
+        scheme = forwarded_proto.split(",", 1)[0].strip().lower()
+        if scheme not in {"http", "https"}:
+            scheme = "https" if scope.get("scheme") in {"https", "wss"} else "http"
         return f"{scheme}://{host}{relative_url}"
 
     # Database operations
@@ -562,6 +583,8 @@ class OnlineStatusConsumer(AsyncWebsocketConsumer):
 
     async def receive(self, text_data):
         """Handle incoming messages (heartbeat)."""
+        if not await self.refresh_authenticated_user():
+            return
         try:
             data = json.loads(text_data)
             if data.get("type") == "heartbeat":
@@ -569,6 +592,21 @@ class OnlineStatusConsumer(AsyncWebsocketConsumer):
                 asyncio.create_task(self._touch_presence_safely())
         except json.JSONDecodeError:
             pass
+
+    async def refresh_authenticated_user(self):
+        """Revalidate the JWT on heartbeat for long-lived status sessions."""
+        token = self.scope.get("auth_token")
+        if not token:
+            return not self.user.is_anonymous
+
+        from .middleware import get_user_from_token
+
+        user = await get_user_from_token(token)
+        if user.is_anonymous:
+            await self.close(code=4001)
+            return False
+        self.user = user
+        return True
 
     async def _touch_presence_safely(self):
         try:

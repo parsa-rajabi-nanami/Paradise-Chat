@@ -245,9 +245,12 @@ class Message(models.Model):
 
     def soft_delete(self):
         """Soft delete the message."""
+        if self.attachment:
+            self.attachment.delete(save=False)
+            self.attachment = None
         self.is_deleted = True
         self.content = "This message has been deleted"
-        self.save(update_fields=["is_deleted", "content"])
+        self.save(update_fields=["is_deleted", "content", "attachment"])
 
 
 class MessageRead(models.Model):

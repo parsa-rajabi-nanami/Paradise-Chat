@@ -2,6 +2,7 @@ import { useRef, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../stores/authStore";
 import { Avatar } from "../components/ui/Avatar";
+import { AvatarCropper } from "../components/AvatarCropper";
 import { ToggleField } from "../components/ui/ToggleField";
 import { TextAreaField } from "../components/ui/TextAreaField";
 import { InputField } from "../components/ui/InputField";
@@ -17,6 +18,7 @@ export function UserSettings() {
   const [username, setUsername] = useState(user?.username || "");
   const [bio, setBio] = useState(user?.bio || "");
   const [avatar, setAvatar] = useState(null);
+  const [cropSource, setCropSource] = useState(null);
   const [previewAvatar, setPreviewAvatar] = useState(user?.avatar || null);
   const [emailNotifications, setEmailNotifications] = useState(user?.email_notifications ?? true);
   const [pushNotifications, setPushNotifications] = useState(user?.push_notifications ?? true);
@@ -51,13 +53,28 @@ export function UserSettings() {
   const handleAvatarChange = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    if (previewAvatar && previewAvatar.startsWith("blob:")) {
-      URL.revokeObjectURL(previewAvatar);
+    if (!file.type.startsWith("image/")) {
+      toast.error("Only image files are allowed");
+      return;
     }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Avatar must be smaller than 5MB");
+      return;
+    }
+    setCropSource(URL.createObjectURL(file));
+  };
 
+  const handleCropComplete = async (file) => {
+    if (previewAvatar?.startsWith("blob:")) URL.revokeObjectURL(previewAvatar);
     setAvatar(file);
     setPreviewAvatar(URL.createObjectURL(file));
+    if (cropSource) URL.revokeObjectURL(cropSource);
+    setCropSource(null);
+  };
+
+  const cancelCrop = () => {
+    if (cropSource) URL.revokeObjectURL(cropSource);
+    setCropSource(null);
   };
 
   const handleTriggerFileInput = () => {
@@ -80,6 +97,7 @@ export function UserSettings() {
       if (avatar) formData.append("avatar", avatar);
 
       await updateProfile(formData);
+      setAvatar(null);
       toast.success("Profile updated successfully");
     } catch (error) {
       const message =
@@ -217,6 +235,10 @@ export function UserSettings() {
             )}
           </button>
         </form>
+
+        {cropSource && (
+          <AvatarCropper imageSrc={cropSource} onCancel={cancelCrop} onComplete={handleCropComplete} />
+        )}
 
         {/* Danger Zone */}
         <div className="p-6 border-t border-[var(--color-border)]">

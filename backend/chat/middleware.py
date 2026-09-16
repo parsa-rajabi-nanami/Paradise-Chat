@@ -23,8 +23,9 @@ def get_user_from_token(token_key):
         user_id = access_token.get("user_id")
         if user_id:
             return User.objects.get(id=user_id, is_active=True, is_deleted=False)
-    except (InvalidToken, TokenError, User.DoesNotExist) as e:
-        logger.warning(f"WebSocket authentication failed: {e}")
+    except (InvalidToken, TokenError, User.DoesNotExist) as exc:
+        # Never log the query-string token or exception text.
+        logger.warning("WebSocket authentication failed: %s", type(exc).__name__)
     return AnonymousUser()
 
 
@@ -39,6 +40,7 @@ class JWTAuthMiddleware(BaseMiddleware):
         query_string = scope.get("query_string", b"").decode()
         query_params = parse_qs(query_string)
         token = query_params.get("token", [None])[0]
+        scope["auth_token"] = token
 
         if token:
             scope["user"] = await get_user_from_token(token)

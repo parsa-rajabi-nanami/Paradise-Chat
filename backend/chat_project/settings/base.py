@@ -105,8 +105,16 @@ STORAGES = {
 }
 
 # Media files
-MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "media"
+MEDIA_URL = os.environ.get("MEDIA_URL", "/media/")
+MEDIA_ROOT = Path(os.environ.get("MEDIA_ROOT", str(BASE_DIR / "media")))
+USE_NGINX_ACCEL_REDIRECT = False
+
+DATA_UPLOAD_MAX_MEMORY_SIZE = int(
+    os.environ.get("DATA_UPLOAD_MAX_MEMORY_SIZE", 12 * 1024 * 1024)
+)
+FILE_UPLOAD_MAX_MEMORY_SIZE = int(
+    os.environ.get("FILE_UPLOAD_MAX_MEMORY_SIZE", 12 * 1024 * 1024)
+)
 
 # Redis-backed cache is part of the normal runtime so /healthz exercises the
 # same dependency in development and production. Tests override this locally.
@@ -138,6 +146,8 @@ REST_FRAMEWORK = {
         "delete_account": "10/hour",
         "login": os.environ.get("LOGIN_THROTTLE_RATE", "10/minute"),
         "register": os.environ.get("REGISTER_THROTTLE_RATE", "5/hour"),
+        "token_refresh": os.environ.get("REFRESH_THROTTLE_RATE", "30/hour"),
+        "upload": os.environ.get("UPLOAD_THROTTLE_RATE", "60/hour"),
     },
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",

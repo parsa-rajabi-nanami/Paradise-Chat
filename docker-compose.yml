@@ -47,6 +47,14 @@ services:
       DB_PORT: 5432
       REDIS_URL: redis://redis:6379/0
       REDIS_CACHE_URL: redis://redis:6379/1
+      MEDIA_STORAGE: ${MEDIA_STORAGE:-local}
+      MEDIA_ROOT: ${MEDIA_ROOT:-/app/media}
+      USE_NGINX_ACCEL_REDIRECT: ${USE_NGINX_ACCEL_REDIRECT:-True}
+      AWS_STORAGE_BUCKET_NAME: ${AWS_STORAGE_BUCKET_NAME:-}
+      AWS_S3_REGION_NAME: ${AWS_S3_REGION_NAME:-}
+      AWS_S3_ENDPOINT_URL: ${AWS_S3_ENDPOINT_URL:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       LOGIN_THROTTLE_RATE: ${LOGIN_THROTTLE_RATE:-10/minute}
       REGISTER_THROTTLE_RATE: ${REGISTER_THROTTLE_RATE:-5/hour}
       WS_RATE_LIMIT_WINDOW_SECONDS: ${WS_RATE_LIMIT_WINDOW_SECONDS:-10}
@@ -59,6 +67,7 @@ services:
     restart: unless-stopped
     volumes:
       - media_data:/app/media
+      - static_data:/app/staticfiles
     healthcheck:
       test:
         ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
@@ -98,6 +107,8 @@ services:
         source: ./deploy/nginx/default.conf
         target: /etc/nginx/conf.d/default.conf
         read_only: true
+      - media_data:/app/media:ro
+      - static_data:/app/staticfiles:ro
     depends_on:
       backend:
         condition: service_healthy
@@ -108,3 +119,4 @@ services:
 volumes:
   postgres_data:
   media_data:
+  static_data:

@@ -163,6 +163,17 @@ docker compose --env-file .env config
 
 The backend container runs `migrate` and `collectstatic` on startup. It runs as a non-root user and stores local media in the `media_data` volume. Changing a `VITE_*` value requires a frontend image rebuild.
 
+The gateway also mounts the `static_data` volume and serves collected Django
+static files directly. Protected avatar and attachment API responses are
+authorized by Django and accelerated through Nginx's internal
+`/protected-media/` location; `/media/` itself is intentionally not public.
+
+To use S3-compatible media instead of the Docker volume, set
+`MEDIA_STORAGE=s3`, `AWS_STORAGE_BUCKET_NAME`, and the provider-specific
+endpoint/region/credentials in the secret environment before starting Compose.
+The bucket must remain private. The backend image includes `django-storages`
+and uses the same authenticated API URLs, so frontend settings do not change.
+
 ### Verify the deployment
 
 Check service state and the internal readiness endpoint:

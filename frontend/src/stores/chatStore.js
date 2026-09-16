@@ -9,6 +9,8 @@ export const useChatStore = create((set) => ({
   typingUsers: {},
   onlineUsers: new Set(),
   isLoading: false,
+  socketStatus: 'disconnected',
+  setSocketStatus: (socketStatus) => set({ socketStatus }),
 
   fetchRooms: async () => {
     set({ isLoading: true });

@@ -8,7 +8,6 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import NotFound, ValidationError, PermissionDenied
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
-from django.http import FileResponse
 import mimetypes
 import os
 from django.db.models import Count, Max, OuterRef, Q, Subquery
@@ -30,6 +29,8 @@ from .serializers import (
     MessageUpdateSerializer,
     ChatRoomUpdateSerializer,
 )
+from .throttles import FileUploadRateThrottle
+from chat_project.media import protected_file_response
 
 
 def with_room_summaries(queryset, user):
@@ -129,6 +130,12 @@ class ChatRoomDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     permission_classes = (IsAuthenticated,)
     serializer_class = ChatRoomDetailSerializer
+
+    def get_throttles(self):
+        throttles = super().get_throttles()
+        if self.request.method in ("PUT", "PATCH"):
+            throttles.append(FileUploadRateThrottle())
+        return throttles
 
     def get_serializer_class(self):
         if self.request.method in ("PUT", "PATCH"):
@@ -384,6 +391,12 @@ class MessageListView(generics.ListCreateAPIView):
     permission_classes = (IsAuthenticated,)
     parser_classes = (JSONParser, MultiPartParser, FormParser)
 
+    def get_throttles(self):
+        throttles = super().get_throttles()
+        if self.request.method == "POST":
+            throttles.append(FileUploadRateThrottle())
+        return throttles
+
     def get_serializer_class(self):
         if self.request.method == "POST":
             return MessageCreateSerializer
@@ -539,12 +552,15 @@ class MessageAttachmentView(APIView):
         if not message.attachment or not message.attachment.name:
             raise NotFound("This message has no attachment.")
 
-        message.attachment.open("rb")
         content_type = mimetypes.guess_type(message.attachment.name)[0]
-        response = FileResponse(message.attachment, content_type=content_type)
+        response = protected_file_response(
+            message.attachment, content_type=content_type
+        )
         response["Content-Disposition"] = (
             f'inline; filename="{os.path.basename(message.attachment.name)}"'
         )
+        response["X-Content-Type-Options"] = "nosniff"
+        response["Cache-Control"] = "private, max-age=300"
         return response
 
 
@@ -565,13 +581,13 @@ class RoomAvatarView(APIView):
             raise NotFound("Room avatar not found.")
         if not room.avatar:
             raise NotFound("This room has no avatar.")
-        room.avatar.open("rb")
-        response = FileResponse(
+        response = protected_file_response(
             room.avatar,
-            content_type=mimetypes.guess_type(room.avatar.name)[0],
+            content_type=mimetypes.guess_type(room.avatar.name)[0] or "image/webp",
         )
         response["Content-Disposition"] = "inline"
         response["X-Content-Type-Options"] = "nosniff"
+        response["Cache-Control"] = "private, max-age=300"
         return response
 
 
