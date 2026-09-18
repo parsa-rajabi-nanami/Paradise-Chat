@@ -7,6 +7,7 @@ from django.urls import reverse
 from django.contrib.auth import get_user_model
 from accounts.serializers import UserMinimalSerializer
 from django.conf import settings
+from urllib.parse import quote
 from .models import ChatRoom, RoomParticipant, Message
 from .config import get_chat_configuration
 from accounts.avatar_processing import process_avatar
@@ -224,6 +225,8 @@ class ChatRoomSerializer(serializers.ModelSerializer):
             return None
         request = self.context.get("request")
         path = reverse("room_avatar", kwargs={"room_id": obj.id})
+        version = quote(obj.avatar.name.rsplit("/", 1)[-1], safe="")
+        path = f"{path}?v={version}"
         return (
             request.build_absolute_uri(path)
             if request

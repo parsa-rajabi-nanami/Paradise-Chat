@@ -13,6 +13,7 @@ import {
   ShieldOff,
 } from 'lucide-react';
 import { Avatar } from '../../components/ui/Avatar';
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { useChatStore } from '../../stores/chatStore';
 
 const RoleBadge = ({ role }) => {
@@ -40,6 +41,7 @@ const RoleBadge = ({ role }) => {
 export function ChatDetails({ room, onClose, currentUser }) {
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [confirmation, setConfirmation] = useState(null);
 
   const leaveRoom = useChatStore((state) => state.leaveRoom);
   const updateParticipantRole = useChatStore((state) => state.updateParticipantRole);
@@ -57,15 +59,18 @@ export function ChatDetails({ room, onClose, currentUser }) {
   const ownersCount = participants.filter((p) => p.role === 'owner').length;
   const participantCount = participants.length;
 
-  const handleLeaveOrDelete = async () => {
+  const requestLeaveOrDelete = () => {
     const actionText = isDirect
       ? 'delete this chat'
       : isOwner && ownersCount === 1
       ? 'delete this group'
       : 'leave this group';
 
-    if (!window.confirm(`Are you sure you want to ${actionText}?`)) return;
+    setConfirmation({ type: 'leave', actionText });
+  };
 
+  const handleLeaveOrDelete = async () => {
+    const { actionText } = confirmation;
     setIsSubmitting(true);
     try {
       await leaveRoom(room.id);
@@ -76,17 +81,25 @@ export function ChatDetails({ room, onClose, currentUser }) {
       toast.error(error.response?.data?.message || `Failed to ${actionText}`);
     } finally {
       setIsSubmitting(false);
+      setConfirmation(null);
     }
   };
 
-  const handleKick = async (userId, userName) => {
-    if (!window.confirm(`Remove ${userName} from this group?`)) return;
+  const requestKick = (userId, userName) => {
+    setConfirmation({ type: 'remove', userId, userName });
+  };
 
+  const handleKick = async () => {
+    const { userId, userName } = confirmation;
+    setIsSubmitting(true);
     try {
       await removeParticipant(room.id, userId);
       toast.success(`${userName} removed`);
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to remove participant');
+    } finally {
+      setIsSubmitting(false);
+      setConfirmation(null);
     }
   };
 
@@ -203,7 +216,7 @@ export function ChatDetails({ room, onClose, currentUser }) {
                           {((isOwner && p.role !== 'owner') || (isAdmin && p.role === 'member')) && (
                             <button
                               title="Remove Member"
-                              onClick={() => handleKick(targetUser.id, targetUser.display_name)}
+                              onClick={() => requestKick(targetUser.id, targetUser.display_name)}
                               className="p-1 rounded hover:bg-[var(--color-surface)] text-red-500 transition-colors"
                             >
                               <UserMinus className="w-4 h-4" />
@@ -231,7 +244,7 @@ export function ChatDetails({ room, onClose, currentUser }) {
           )}
 
           <button
-            onClick={handleLeaveOrDelete}
+            onClick={requestLeaveOrDelete}
             disabled={isSubmitting}
             className={`w-full flex items-center justify-center gap-2 py-2 rounded-lg transition-colors font-medium text-sm ${
               isDirect || (isOwner && ownersCount === 1)
@@ -255,6 +268,26 @@ export function ChatDetails({ room, onClose, currentUser }) {
           </button>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={Boolean(confirmation)}
+        title={
+          confirmation?.type === 'remove'
+            ? 'Remove member?'
+            : confirmation?.actionText?.startsWith('delete')
+            ? 'Delete conversation?'
+            : 'Leave conversation?'
+        }
+        description={
+          confirmation?.type === 'remove'
+            ? `Remove ${confirmation.userName} from this group?`
+            : `Are you sure you want to ${confirmation?.actionText}?`
+        }
+        confirmLabel={confirmation?.type === 'remove' ? 'Remove member' : confirmation?.actionText?.replace(/^./, character => character.toUpperCase())}
+        onConfirm={confirmation?.type === 'remove' ? handleKick : handleLeaveOrDelete}
+        onCancel={() => !isSubmitting && setConfirmation(null)}
+        isLoading={isSubmitting}
+      />
     </div>
   );
 }

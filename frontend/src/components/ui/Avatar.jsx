@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
 import apiClient from '../../api/client';
+import { Loader2 } from 'lucide-react';
 
 
 const sizes = {
@@ -43,44 +44,76 @@ export function Avatar({
   size = 'md',
   isOnline
 }) {
-  const [imageSrc, setImageSrc] = useState(src || null);
+  const [imageSrc, setImageSrc] = useState(
+    src?.startsWith('blob:') ? src : null
+  );
+  const [isLoading, setIsLoading] = useState(Boolean(src && !src.startsWith('blob:')));
+  const loadedObjectUrlRef = useRef(null);
   const initials = getInitials(name);
   const colorClass = getColorFromName(name);
 
   useEffect(() => {
-    let objectUrl = null;
     let active = true;
 
     if (!src || src.startsWith('blob:')) {
+      if (loadedObjectUrlRef.current) {
+        URL.revokeObjectURL(loadedObjectUrlRef.current);
+        loadedObjectUrlRef.current = null;
+      }
       setImageSrc(src || null);
+      setIsLoading(false);
       return () => {
         active = false;
       };
     }
 
-    setImageSrc(null);
+    setIsLoading(true);
     apiClient
-      .get(src, { responseType: 'blob' })
+      .get(src, {
+        responseType: 'blob',
+        // Avatar URLs are versioned, but revalidation also protects older
+        // clients that still have the pre-versioned endpoint cached.
+        headers: { 'Cache-Control': 'no-cache' }
+      })
       .then(({ data }) => {
         if (!active) return;
-        objectUrl = URL.createObjectURL(data);
+        const objectUrl = URL.createObjectURL(data);
+        if (loadedObjectUrlRef.current) {
+          URL.revokeObjectURL(loadedObjectUrlRef.current);
+        }
+        loadedObjectUrlRef.current = objectUrl;
         setImageSrc(objectUrl);
+        setIsLoading(false);
       })
       .catch(() => {
-        if (active) setImageSrc(null);
+        if (active) {
+          setImageSrc(null);
+          setIsLoading(false);
+        }
       });
 
     return () => {
       active = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [src]);
 
+  useEffect(() => () => {
+    if (loadedObjectUrlRef.current) {
+      URL.revokeObjectURL(loadedObjectUrlRef.current);
+    }
+  }, []);
+
   return (
     <div className="relative inline-block flex-shrink-0">
-      {imageSrc ? <img src={imageSrc} alt={name} loading="lazy" decoding="async" className={clsx('rounded-full object-cover', sizes[size])} onError={() => setImageSrc(null)} /> : <div className={clsx('avatar bg-gradient-to-br', colorClass, sizes[size])}>
+      {imageSrc ? <img src={imageSrc} alt={name} loading="lazy" decoding="async" className={clsx('rounded-full object-cover', sizes[size])} onError={() => { setImageSrc(null); setIsLoading(false); }} /> : <div className={clsx('avatar bg-gradient-to-br', colorClass, sizes[size])}>
         {initials}
       </div>}
+
+      {isLoading && (
+        <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/25" role="status" aria-label="Loading avatar">
+          <Loader2 className={clsx('animate-spin text-white', size === 'sm' ? 'h-3 w-3' : 'h-5 w-5')} />
+        </span>
+      )}
 
       {/* Online indicator */}
       {isOnline !== undefined && <span className={clsx('absolute rounded-full border-2 border-gray-800', isOnline ? 'bg-green-500' : 'bg-gray-500', indicatorSizes[size])} />}

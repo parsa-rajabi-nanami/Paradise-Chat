@@ -308,6 +308,27 @@ class WebSocketService {
     });
   }
 
+  sendSocketMessage(payload, roomId = this.roomId) {
+    const socket = this.socket;
+    if (
+      !socket ||
+      socket.readyState !== WebSocket.OPEN ||
+      this.roomId !== roomId
+    ) {
+      return false;
+    }
+
+    try {
+      socket.send(JSON.stringify(payload));
+      return true;
+    } catch {
+      // A socket can close between readyState and send. Callers that have a
+      // REST fallback continue through that path instead of surfacing a
+      // native "closed WebSocket" error to the console.
+      return false;
+    }
+  }
+
   async sendMessage({ room = null, content = '', file = null, replyTo = null }) {
     const targetRoomId = room || this.roomId;
 
@@ -321,20 +342,17 @@ class WebSocketService {
       return created;
     }
 
-    if (this.socket?.readyState === WebSocket.OPEN) {
-      try {
-        this.socket.send(
-          JSON.stringify({
-            type: 'message',
-            content,
-            reply_to: replyTo
-          })
-        );
+    if (
+      this.sendSocketMessage(
+        {
+          type: 'message',
+          content,
+          reply_to: replyTo
+        },
+        targetRoomId
+      )
+    ) {
         return true;
-      } catch {
-        // Fall through to REST if the socket closed between the state check
-        // and send. The API path keeps text messages usable during reconnects.
-      }
     }
 
     const created = await chatApi.sendMessage(targetRoomId, content, replyTo);
@@ -342,48 +360,33 @@ class WebSocketService {
     return created;
   }
 
-  sendTyping(isTyping) {
-    if (this.socket?.readyState === WebSocket.OPEN) {
-      this.socket.send(
-        JSON.stringify({
-          type: 'typing',
-          is_typing: isTyping
-        })
-      );
-    }
+  sendTyping(isTyping, roomId = this.roomId) {
+    this.sendSocketMessage(
+      {
+        type: 'typing',
+        is_typing: isTyping
+      },
+      roomId
+    );
   }
 
   sendRead() {
-    if (this.socket?.readyState === WebSocket.OPEN) {
-      this.socket.send(
-        JSON.stringify({
-          type: 'read'
-        })
-      );
-    }
+    this.sendSocketMessage({ type: 'read' });
   }
 
   editMessage(messageId, content) {
-    if (this.socket?.readyState === WebSocket.OPEN) {
-      this.socket.send(
-        JSON.stringify({
-          type: 'edit',
-          message_id: messageId,
-          content
-        })
-      );
-    }
+    this.sendSocketMessage({
+      type: 'edit',
+      message_id: messageId,
+      content
+    });
   }
 
   deleteMessage(messageId) {
-    if (this.socket?.readyState === WebSocket.OPEN) {
-      this.socket.send(
-        JSON.stringify({
-          type: 'delete',
-          message_id: messageId
-        })
-      );
-    }
+    this.sendSocketMessage({
+      type: 'delete',
+      message_id: messageId
+    });
   }
 
   onMessage(handler) {

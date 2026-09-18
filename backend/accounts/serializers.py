@@ -11,6 +11,7 @@ from .validators import validate_passphrase
 from .avatar_processing import process_avatar
 from rest_framework.exceptions import AuthenticationFailed
 import re
+from urllib.parse import quote
 
 User = get_user_model()
 
@@ -284,7 +285,12 @@ class UserMinimalSerializer(serializers.ModelSerializer):
         base_url = self.context.get("base_url")
         if base_url and obj.avatar:
             path = reverse("user_avatar", kwargs={"user_id": obj.id})
-            suffix = "?size=thumbnail" if obj.avatar_thumbnail else ""
+            version = quote(obj.avatar.name.rsplit("/", 1)[-1], safe="")
+            suffix = (
+                f"?size=thumbnail&v={version}"
+                if obj.avatar_thumbnail
+                else f"?v={version}"
+            )
             return f"{base_url.rstrip('/')}{path}{suffix}"
 
         return obj.get_avatar_url(thumbnail=True)

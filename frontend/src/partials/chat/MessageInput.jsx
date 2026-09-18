@@ -52,19 +52,19 @@ export function MessageInput({ roomId, replyTo, onCancelReply }) {
   const stopTyping = useCallback(() => {
     if (isTypingRef.current) {
       isTypingRef.current = false;
-      wsService.sendTyping(false);
+      wsService.sendTyping(false, roomId);
     }
-  }, []);
+  }, [roomId]);
 
   const handleTyping = useCallback(() => {
     if (!isTypingRef.current) {
       isTypingRef.current = true;
-      wsService.sendTyping(true);
+      wsService.sendTyping(true, roomId);
     }
 
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(stopTyping, 2000);
-  }, [stopTyping]);
+  }, [roomId, stopTyping]);
 
   // Cleanup typing timeout on unmount
   useEffect(() => {

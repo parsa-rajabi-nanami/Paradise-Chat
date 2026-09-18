@@ -267,8 +267,8 @@ def test_websocket_media_urls_use_public_host_and_scheme(
         }
         serialized = async_to_sync(consumer.serialize_message)(message)
 
-    assert serialized["sender"]["avatar"] == (
-        f"https://127.0.0.1:8081/api/auth/users/{user.id}/avatar/"
+    assert serialized["sender"]["avatar"].startswith(
+        f"https://127.0.0.1:8081/api/auth/users/{user.id}/avatar/?v="
     )
 
 

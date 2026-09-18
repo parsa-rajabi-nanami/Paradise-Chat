@@ -1,9 +1,11 @@
 import { useState, memo, useCallback, useEffect } from 'react';
 import { CheckCheck, Check, Edit2, Trash2, Paperclip, X, Check as SaveIcon } from 'lucide-react';
 import { Avatar } from '../../components/ui/Avatar';
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { useAuthStore } from '../../stores/authStore';
 import clsx from 'clsx';
 import { format, isValid } from 'date-fns';
+import toast from 'react-hot-toast';
 
 function MessageBubble({
   room_id,
@@ -16,6 +18,8 @@ function MessageBubble({
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message?.content || '');
   const [attachmentUrl, setAttachmentUrl] = useState(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const accessToken = useAuthStore((state) => state.tokens?.access);
 
   useEffect(() => {
@@ -83,8 +87,18 @@ function MessageBubble({
   };
 
   const handleDelete = () => {
-    if (window.confirm('Delete this message for everyone?')) {
-      deleteMessage(room_id, message.id);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    setIsDeleting(true);
+    try {
+      await deleteMessage(room_id, message.id);
+      setIsDeleteDialogOpen(false);
+    } catch (error) {
+      toast.error(error?.message || 'Message could not be deleted.');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -255,6 +269,16 @@ function MessageBubble({
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={isDeleteDialogOpen}
+        title="Delete message?"
+        description="This message will be removed for everyone in this conversation."
+        confirmLabel="Delete message"
+        onConfirm={confirmDelete}
+        onCancel={() => !isDeleting && setIsDeleteDialogOpen(false)}
+        isLoading={isDeleting}
+      />
     </div>
   );
 }

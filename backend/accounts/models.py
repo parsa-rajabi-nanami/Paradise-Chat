@@ -9,6 +9,7 @@ from django.utils import timezone
 from django.conf import settings
 from django.urls import reverse
 import uuid
+from urllib.parse import quote
 from .validators import validate_avatar
 
 
@@ -139,8 +140,13 @@ class User(AbstractUser):
         if not self.avatar:
             return None
         path = reverse("user_avatar", kwargs={"user_id": self.id})
+        # The endpoint is intentionally cacheable, so make each stored avatar
+        # a distinct resource when a user replaces it.
+        version = quote(self.avatar.name.rsplit("/", 1)[-1], safe="")
         if thumbnail and self.avatar_thumbnail:
-            path = f"{path}?size=thumbnail"
+            path = f"{path}?size=thumbnail&v={version}"
+        else:
+            path = f"{path}?v={version}"
         if request:
             return request.build_absolute_uri(path)
         return f"{settings.BASE_URL}{path}"
