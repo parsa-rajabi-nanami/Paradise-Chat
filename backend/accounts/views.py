@@ -125,6 +125,15 @@ class ProfileView(generics.RetrieveUpdateAPIView):
     def get_object(self):
         return self.request.user
 
+    def update(self, request, *args, **kwargs):
+        response = super().update(request, *args, **kwargs)
+        # PATCH uses UserUpdateSerializer for input validation, but clients
+        # need the complete profile shape after replacing their local user.
+        response.data = UserSerializer(
+            self.get_object(), context={"request": request}
+        ).data
+        return response
+
 
 class PasswordChangeView(APIView):
     """Change password endpoint."""

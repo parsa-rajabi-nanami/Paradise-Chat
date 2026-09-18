@@ -331,7 +331,28 @@ export const useChatStore = create((set) => ({
       } else {
         onlineUsers.delete(userId);
       }
-      return { onlineUsers };
+
+      const updateRoomParticipant = (room) => {
+        if (!room?.participants_info) return room;
+
+        return {
+          ...room,
+          participants_info: room.participants_info.map((participant) =>
+            participant.user?.id === userId
+              ? {
+                  ...participant,
+                  user: { ...participant.user, is_online: isOnline }
+                }
+              : participant
+          )
+        };
+      };
+
+      return {
+        onlineUsers,
+        rooms: state.rooms.map(updateRoomParticipant),
+        activeRoom: updateRoomParticipant(state.activeRoom)
+      };
     });
   },
 

@@ -261,6 +261,9 @@ def test_profile_upload_is_center_cropped_and_generates_thumbnail(
 
         thumbnail_url = response.json()["avatar"]
         assert "size=thumbnail" not in thumbnail_url
+        assert response.json()["email"] == user.email
+        assert "/api/auth/users/" in response.json()["avatar"]
+        assert "?v=" in response.json()["avatar"]
 
 
 def test_profile_upload_rejects_fake_image_content(user_factory, jwt_for):

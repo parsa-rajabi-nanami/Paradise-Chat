@@ -101,7 +101,9 @@ export const useAuthStore = create()(
         try {
           const updatedUser = await authApi.updateProfile(formData);
           set({
-            user: updatedUser,
+            // Keep stable local fields if an older API instance returns a
+            // partial update response while the new endpoint is rolling out.
+            user: { ...get().user, ...updatedUser },
             isLoading: false
           });
           return updatedUser;

@@ -83,6 +83,16 @@ class ChatConsumer(AsyncWebsocketConsumer):
             # Clear typing status
             await self.set_typing_status(False)
 
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    "type": "typing_indicator",
+                    "user_id": self.user.id,
+                    "username": self.user.username,
+                    "is_typing": False,
+                },
+            )
+
             # Notify room of user leaving
             await self.channel_layer.group_send(
                 self.room_group_name,
