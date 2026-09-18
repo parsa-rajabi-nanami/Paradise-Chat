@@ -266,6 +266,38 @@ def test_profile_upload_is_center_cropped_and_generates_thumbnail(
         assert "?v=" in response.json()["avatar"]
 
 
+def test_profile_update_returns_complete_profile_without_replacing_avatar(
+    user_factory, jwt_for, tmp_path
+):
+    user = user_factory("profile_update", email="profile@example.com")
+    source = BytesIO()
+    Image.new("RGB", (16, 16), color="purple").save(source, format="PNG")
+    source.seek(0)
+
+    with override_settings(MEDIA_ROOT=tmp_path):
+        user.avatar.save(
+            "existing.png", ContentFile(source.getvalue()), save=True
+        )
+        old_avatar_name = user.avatar.name
+        _, access = jwt_for(user)
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+
+        response = client.patch(
+            "/api/auth/profile/",
+            {"display_name": "Updated profile"},
+            format="multipart",
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["email"] == user.email
+    assert data["display_name"] == "Updated profile"
+    assert data["avatar"].startswith("http")
+    assert "/api/auth/users/" in data["avatar"]
+    assert old_avatar_name.rsplit("/", 1)[-1] in data["avatar"]
+
+
 def test_profile_upload_rejects_fake_image_content(user_factory, jwt_for):
     user = user_factory("fake_avatar")
     _, access = jwt_for(user)

@@ -99,14 +99,23 @@ export const useAuthStore = create()(
       updateProfile: async formData => {
         set({ isLoading: true });
         try {
-          const updatedUser = await authApi.updateProfile(formData);
+          const responseUser = await authApi.updateProfile(formData);
+          const updatedUser = responseUser?.user || responseUser;
+          const hasCompleteProfile =
+            updatedUser &&
+            Object.prototype.hasOwnProperty.call(updatedUser, 'email') &&
+            Object.prototype.hasOwnProperty.call(updatedUser, 'avatar');
+          const profile = hasCompleteProfile
+            ? updatedUser
+            : await authApi.getProfile();
+
           set({
-            // Keep stable local fields if an older API instance returns a
-            // partial update response while the new endpoint is rolling out.
-            user: { ...get().user, ...updatedUser },
+            // Profile updates must never replace the canonical user with a
+            // partial response from an older API instance.
+            user: { ...get().user, ...profile },
             isLoading: false
           });
-          return updatedUser;
+          return profile;
         } catch (error) {
           set({ isLoading: false });
           throw error;
@@ -147,7 +156,9 @@ export const useAuthStore = create()(
 
       onRehydrateStorage: () => state => {
         if (state) {
-          state.isInitialized = true;
+          // Defer until create() has returned the store. This also keeps the
+          // hydration flag observable instead of mutating the callback value.
+          queueMicrotask(() => useAuthStore.setState({ isInitialized: true }));
         }
       }
     }

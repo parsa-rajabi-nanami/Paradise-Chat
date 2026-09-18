@@ -30,7 +30,7 @@ class WebSocketService {
       /^(localhost|127(?:\.\d{1,3}){3}|\[::1\])(?::\d+)?$/i.test(host);
     const host =
       configuredHost &&
-      !(isLoopbackHost(configuredHost) && !isLoopbackHost(currentHost))
+      !(isLoopbackHost(configuredHost) && configuredHost !== currentHost)
         ? configuredHost
         : currentHost;
     return `${protocol}//${host}`;
@@ -84,9 +84,11 @@ class WebSocketService {
     socket.onclose = (event) => {
       if (this.socket !== socket) return;
       console.log(`Disconnected from room ${roomId}`, event.code);
-      useChatStore.getState().setSocketStatus('disconnected');
       if (!event.wasClean && this.reconnectAttempts < this.maxReconnectAttempts) {
+        useChatStore.getState().setSocketStatus('connecting');
         this.scheduleReconnect();
+      } else {
+        useChatStore.getState().setSocketStatus(event.wasClean ? 'disconnected' : 'error');
       }
     };
 
@@ -125,6 +127,7 @@ class WebSocketService {
     const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
 
     this.reconnectTimeout = setTimeout(() => {
+      this.reconnectTimeout = null;
       if (currentRoomId) {
         this.connectToRoom(currentRoomId, true);
       }
@@ -173,9 +176,14 @@ class WebSocketService {
       this.stopHeartbeat();
 
       if (!event.wasClean && this.statusReconnectAttempts < this.maxReconnectAttempts) {
+        if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+          useChatStore.getState().setSocketStatus('connecting');
+        }
         this.statusReconnectAttempts++;
         const delay = Math.min(1000 * Math.pow(2, this.statusReconnectAttempts), 30000);
         this.statusReconnectTimeout = setTimeout(() => this.connectToStatus(), delay);
+      } else if (!event.wasClean && (!this.socket || this.socket.readyState !== WebSocket.OPEN)) {
+        useChatStore.getState().setSocketStatus('error');
       }
     };
 

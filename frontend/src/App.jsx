@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './stores/authStore';
 
@@ -15,6 +15,20 @@ const ChatSettings = lazy(() => import('./pages/ChatSettings').then(m => ({ defa
 
 function App() {
   const isAuthenticated = useAuthStore(state => state.isAuthenticated);
+  const isInitialized = useAuthStore(state => state.isInitialized);
+  const fetchProfile = useAuthStore(state => state.fetchProfile);
+
+  useEffect(() => {
+    if (!isInitialized || !isAuthenticated) return;
+
+    // The persisted profile can contain URLs from an older deployment. Fetch
+    // the server representation once after hydration so all profile fields
+    // and protected media URLs are canonical before they reach the UI.
+    fetchProfile().catch(() => {
+      // Keep the existing session on transient network failures. The API
+      // interceptor handles an expired access token and auth failures.
+    });
+  }, [isInitialized, isAuthenticated, fetchProfile]);
 
   return (
     <ErrorBoundary>

@@ -109,7 +109,18 @@ else
   log "Backed up environment to $(basename "$backup_file")"
 fi
 
-compose=(docker compose --env-file "$ENV_FILE")
+# Compose gives exported shell variables precedence over --env-file. The
+# deployment file is the source of truth here; otherwise a stale APP_PORT or
+# VITE_WS_HOST in the shell can recreate the stack with an old endpoint.
+compose=(
+  env
+  -u APP_BIND_ADDRESS
+  -u APP_PORT
+  -u VITE_API_URL
+  -u VITE_WS_HOST
+  -u VITE_SITE_URL
+  docker compose --env-file "$ENV_FILE"
+)
 
 get_env() {
   local key="$1"
@@ -340,6 +351,16 @@ wait_for_running() {
 wait_for_healthy backend
 wait_for_healthy frontend
 wait_for_running nginx
+
+verify_published_port() {
+  local container_id actual_port
+  container_id="$("${compose[@]}" ps -q nginx 2>/dev/null || true)"
+  [[ -n "$container_id" ]] || die "Could not find the Nginx container after deployment"
+  actual_port="$(docker port "$container_id" 80/tcp 2>/dev/null | sed -nE 's/.*:([0-9]+)$/\1/p' | head -n1 || true)"
+  [[ "$actual_port" == "$PORT" ]] || die "Nginx is published on port ${actual_port:-unknown}, expected $PORT"
+}
+
+verify_published_port
 
 if command -v curl >/dev/null 2>&1; then
   curl --fail --silent --show-error --max-time 10 "http://127.0.0.1:$PORT/healthz" >/dev/null \
