@@ -262,13 +262,13 @@ def test_websocket_media_urls_use_public_host_and_scheme(
 
         consumer = CommunicatorChatConsumer()
         consumer.scope = {
-            "headers": [(b"host", b"127.0.0.1:8081")],
+            "headers": [(b"host", b"127.0.0.1:8080")],
             "scheme": "wss",
         }
         serialized = async_to_sync(consumer.serialize_message)(message)
 
     assert serialized["sender"]["avatar"].startswith(
-        f"https://127.0.0.1:8081/api/auth/users/{user.id}/avatar/?v="
+        f"https://127.0.0.1:8080/api/auth/users/{user.id}/avatar/?v="
     )
 
 

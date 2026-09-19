@@ -7,6 +7,7 @@ ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="$ROOT_DIR/.env"
 SITE_URL=""
 PORT=""
+PORT_EXPLICIT=0
 BIND_ADDRESS=""
 ROTATE_APP_SECRETS=0
 NO_BUILD=0
@@ -60,6 +61,7 @@ while (($#)); do
     --port)
       (($# >= 2)) || die "--port requires a value"
       PORT="$2"
+      PORT_EXPLICIT=1
       shift 2
       ;;
     --bind-address)
@@ -181,6 +183,16 @@ valid_port() {
   [[ "$1" =~ ^[0-9]+$ ]] && ((1 <= 10#$1 && 10#$1 <= 65535))
 }
 
+is_loopback_site_url() {
+  local url="$1"
+  local hostport host
+
+  [[ "$url" =~ ^https?://([^/]+)$ ]] || return 1
+  hostport="${BASH_REMATCH[1]}"
+  host="${hostport%%:*}"
+  [[ "$host" == "localhost" || "$host" =~ ^127(\.[0-9]{1,3}){3}$ ]]
+}
+
 port_in_use() {
   local port="$1"
   if command -v ss >/dev/null 2>&1; then
@@ -221,7 +233,9 @@ fi
 
 if [[ -z "$SITE_URL" ]]; then
   configured_site_url="$(get_env VITE_SITE_URL || true)"
-  if (( CREATED_ENV )) || [[ -z "$configured_site_url" || "$configured_site_url" == "http://localhost" ]]; then
+  if (( CREATED_ENV )) || [[ -z "$configured_site_url" || "$configured_site_url" == "http://localhost" ]] || {
+    (( PORT_EXPLICIT )) && is_loopback_site_url "$configured_site_url"
+  }; then
     SITE_URL="http://127.0.0.1:$PORT"
   else
     SITE_URL="$configured_site_url"

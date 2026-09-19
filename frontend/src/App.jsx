@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './stores/authStore';
 
@@ -17,9 +17,18 @@ function App() {
   const isAuthenticated = useAuthStore(state => state.isAuthenticated);
   const isInitialized = useAuthStore(state => state.isInitialized);
   const fetchProfile = useAuthStore(state => state.fetchProfile);
+  const [profileReady, setProfileReady] = useState(false);
 
   useEffect(() => {
-    if (!isInitialized || !isAuthenticated) return;
+    if (!isInitialized) return undefined;
+
+    if (!isAuthenticated) {
+      setProfileReady(true);
+      return undefined;
+    }
+
+    let active = true;
+    setProfileReady(false);
 
     // The persisted profile can contain URLs from an older deployment. Fetch
     // the server representation once after hydration so all profile fields
@@ -27,8 +36,18 @@ function App() {
     fetchProfile().catch(() => {
       // Keep the existing session on transient network failures. The API
       // interceptor handles an expired access token and auth failures.
+    }).finally(() => {
+      if (active) setProfileReady(true);
     });
+
+    return () => {
+      active = false;
+    };
   }, [isInitialized, isAuthenticated, fetchProfile]);
+
+  if (!isInitialized || !profileReady) {
+    return <PageLoader />;
+  }
 
   return (
     <ErrorBoundary>

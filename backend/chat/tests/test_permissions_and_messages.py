@@ -1,7 +1,10 @@
+from io import BytesIO
+
 import pytest
 from django.core.files.base import ContentFile
 from django.test import override_settings
 from rest_framework.test import APIClient
+from PIL import Image
 
 from chat.models import Message, RoomParticipant
 
@@ -200,6 +203,30 @@ def test_member_cannot_change_room_security_state(user_factory, room_factory, jw
     room.refresh_from_db()
     assert room.name == "Test room"
     assert room.is_active is True
+
+
+def test_room_avatar_update_returns_protected_urls(
+    user_factory, room_factory, jwt_for, tmp_path
+):
+    owner = user_factory("avatar_owner")
+    room = room_factory(owner=owner)
+    client = authenticated_client(owner, jwt_for)
+    image_data = BytesIO()
+    Image.new("RGB", (16, 16), color="purple").save(image_data, format="PNG")
+
+    with override_settings(MEDIA_ROOT=tmp_path):
+        response = client.patch(
+            f"/api/chat/rooms/{room.id}/",
+            {"avatar": ContentFile(image_data.getvalue(), name="room.png")},
+            format="multipart",
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["avatar"].startswith("http")
+    assert data["display_avatar"] == data["avatar"]
+    assert f"/api/chat/rooms/{room.id}/avatar/" in data["avatar"]
+    assert "/media/" not in data["avatar"]
 
 
 def test_room_list_summary_is_ordered_and_scoped(user_factory, room_factory, jwt_for):

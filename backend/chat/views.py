@@ -232,7 +232,13 @@ class ChatRoomDetailView(generics.RetrieveUpdateDestroyAPIView):
             )
         if room.room_type == "direct":
             raise PermissionDenied("Direct room settings cannot be changed.")
-        return super().update(request, *args, **kwargs)
+        response = super().update(request, *args, **kwargs)
+        # The update serializer accepts the upload, but its default response
+        # would expose the storage path instead of the protected avatar URL.
+        response.data = ChatRoomSerializer(
+            self.get_object(), context={"request": request}
+        ).data
+        return response
 
 
 class ManageParticipantView(APIView):
