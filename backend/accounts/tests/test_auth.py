@@ -275,9 +275,7 @@ def test_profile_update_returns_complete_profile_without_replacing_avatar(
     source.seek(0)
 
     with override_settings(MEDIA_ROOT=tmp_path):
-        user.avatar.save(
-            "existing.png", ContentFile(source.getvalue()), save=True
-        )
+        user.avatar.save("existing.png", ContentFile(source.getvalue()), save=True)
         old_avatar_name = user.avatar.name
         _, access = jwt_for(user)
         client = APIClient()
