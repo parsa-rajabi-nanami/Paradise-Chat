@@ -73,6 +73,9 @@ class CommunicatorOnlineStatusConsumer(OnlineStatusConsumer):
     async def set_online_status(self, is_online):
         return OnlineStatusConsumer.__dict__["set_online_status"].func(self, is_online)
 
+    async def get_online_users(self):
+        return OnlineStatusConsumer.__dict__["get_online_users"].func(self)
+
 
 def application_for_user(user, consumer_class, route):
     router = URLRouter([re_path(route, consumer_class.as_asgi())])
@@ -189,6 +192,41 @@ async def _online_status_heartbeat(presence_user):
 
 def test_online_status_heartbeat(presence_user):
     async_to_sync(_online_status_heartbeat)(presence_user)
+
+
+def test_online_status_sends_snapshot_for_existing_connections(
+    presence_user, user_factory
+):
+    existing_user = user_factory("already_online")
+
+    async def connect_and_receive_snapshot():
+        existing = CommunicatorOnlineStatusConsumer()
+        existing.user = existing_user
+        await existing.set_online_status(True)
+
+        from rest_framework_simplejwt.tokens import AccessToken
+
+        access = AccessToken.for_user(presence_user)
+        socket = WebsocketCommunicator(
+            application_for_user(
+                presence_user, CommunicatorOnlineStatusConsumer, r"ws/status/$"
+            ),
+            f"/ws/status/?token={access}",
+            headers=[(b"origin", b"http://testserver")],
+        )
+        connected, _ = await socket.connect()
+        assert connected is True
+
+        statuses = [await socket.receive_json_from() for _ in range(2)]
+        assert {status["user_id"] for status in statuses} == {
+            existing_user.id,
+            presence_user.id,
+        }
+
+        await socket.disconnect()
+        await existing.set_online_status(False)
+
+    async_to_sync(connect_and_receive_snapshot)()
 
 
 def test_presence_stays_online_until_last_connection_closes(presence_user):

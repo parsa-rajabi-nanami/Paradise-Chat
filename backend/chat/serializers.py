@@ -22,6 +22,7 @@ class MessageSerializer(serializers.ModelSerializer):
     attachment = serializers.SerializerMethodField()
     reply_to_preview = serializers.SerializerMethodField()
     is_own_message = serializers.SerializerMethodField()
+    is_read = serializers.SerializerMethodField()
 
     class Meta:
         model = Message
@@ -38,6 +39,7 @@ class MessageSerializer(serializers.ModelSerializer):
             "is_deleted",
             "created_at",
             "is_own_message",
+            "is_read",
         )
         read_only_fields = (
             "id",
@@ -81,6 +83,14 @@ class MessageSerializer(serializers.ModelSerializer):
         if request and request.user:
             return obj.sender_id == request.user.id
         return False
+
+    def get_is_read(self, obj):
+        """Return whether another participant has read a sent message."""
+        if not obj.sender_id:
+            return False
+        if hasattr(obj, "is_read"):
+            return obj.is_read
+        return obj.read_by.exclude(user_id=obj.sender_id).exists()
 
 
 class MessageCreateSerializer(serializers.ModelSerializer):

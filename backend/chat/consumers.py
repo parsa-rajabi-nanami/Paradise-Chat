@@ -555,6 +555,21 @@ class OnlineStatusConsumer(AsyncWebsocketConsumer):
         # Set user online
         await self.set_online_status(True)
 
+        # Send a snapshot so a newly connected client does not have to wait
+        # for every other user to reconnect before their status is known.
+        online_users, offline_user_ids = await self.get_online_users()
+        for online_user in online_users:
+            await self.send(
+                text_data=json.dumps(
+                    {
+                        "type": "status",
+                        "user_id": online_user["id"],
+                        "username": online_user["username"],
+                        "is_online": True,
+                    }
+                )
+            )
+
         # Broadcast online status
         await self.channel_layer.group_send(
             self.status_group,
@@ -565,6 +580,16 @@ class OnlineStatusConsumer(AsyncWebsocketConsumer):
                 "is_online": True,
             },
         )
+
+        for user_id in offline_user_ids:
+            await self.channel_layer.group_send(
+                self.status_group,
+                {
+                    "type": "status_update",
+                    "user_id": user_id,
+                    "is_online": False,
+                },
+            )
 
         logger.info(f"User {self.user.username} is now online")
 
@@ -626,12 +651,15 @@ class OnlineStatusConsumer(AsyncWebsocketConsumer):
 
     async def status_update(self, event):
         """Send status update to WebSocket."""
+        # The connecting client receives its own state in the snapshot above.
+        if event["user_id"] == self.user.id:
+            return
         await self.send(
             text_data=json.dumps(
                 {
                     "type": "status",
                     "user_id": event["user_id"],
-                    "username": event["username"],
+                    "username": event.get("username", ""),
                     "is_online": event["is_online"],
                 }
             )
@@ -665,3 +693,40 @@ class OnlineStatusConsumer(AsyncWebsocketConsumer):
             UserPresence.objects.filter(id=self.presence_id, user=self.user).update(
                 last_heartbeat=timezone.now()
             )
+
+    @database_sync_to_async
+    def get_online_users(self):
+        """Return users with a presence heartbeat within the timeout window."""
+        cutoff = timezone.now() - timedelta(seconds=90)
+        stale_user_ids = set(
+            UserPresence.objects.filter(last_heartbeat__lt=cutoff)
+            .values_list("user_id", flat=True)
+            .distinct()
+        )
+        UserPresence.objects.filter(last_heartbeat__lt=cutoff).delete()
+
+        users_to_mark_offline = set()
+        if stale_user_ids:
+            active_presence_user_ids = set(
+                UserPresence.objects.filter(
+                    user_id__in=stale_user_ids, last_heartbeat__gte=cutoff
+                )
+                .values_list("user_id", flat=True)
+                .distinct()
+            )
+            users_to_mark_offline = stale_user_ids - active_presence_user_ids
+            if users_to_mark_offline:
+                User.objects.filter(id__in=users_to_mark_offline).update(
+                    is_online=False, last_seen=timezone.now()
+                )
+
+        online_users = list(
+            User.objects.filter(
+                presence_connections__last_heartbeat__gte=cutoff,
+                is_active=True,
+                is_deleted=False,
+            )
+            .values("id", "username")
+            .distinct()
+        )
+        return online_users, list(users_to_mark_offline)

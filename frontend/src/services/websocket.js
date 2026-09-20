@@ -174,6 +174,7 @@ class WebSocketService {
       if (this.statusSocket !== socket) return;
       console.log('Disconnected from status updates');
       this.stopHeartbeat();
+      useChatStore.getState().clearOnlineUsers();
 
       if (!event.wasClean && this.statusReconnectAttempts < this.maxReconnectAttempts) {
         if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
@@ -207,6 +208,7 @@ class WebSocketService {
       this.statusSocket = null;
     }
 
+    useChatStore.getState().clearOnlineUsers();
     this.statusReconnectAttempts = 0;
   }
 
@@ -301,7 +303,15 @@ class WebSocketService {
         break;
       case 'user_join':
       case 'user_leave':
+        break;
       case 'read':
+        if (this.roomId && data.user_id) {
+          chatStore.markMessagesRead(
+            this.roomId,
+            data.user_id,
+            useAuthStore.getState().user?.id
+          );
+        }
         break;
       default:
         break;
@@ -369,13 +379,19 @@ class WebSocketService {
   }
 
   sendTyping(isTyping, roomId = this.roomId) {
-    this.sendSocketMessage(
+    const sent = this.sendSocketMessage(
       {
         type: 'typing',
         is_typing: isTyping
       },
       roomId
     );
+
+    if (!sent) {
+      chatApi.updateTypingStatus(roomId, isTyping).catch(() => { });
+    }
+
+    return sent;
   }
 
   sendRead() {

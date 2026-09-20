@@ -24,7 +24,17 @@ export const useChatStore = create((set) => ({
   },
 
   setActiveRoom: (room) => {
-    set({ activeRoom: room });
+    set((state) => {
+      if (!room) return { activeRoom: null };
+
+      const markRoomRead = (item) =>
+        item.id === room.id ? { ...item, unread_count: 0 } : item;
+
+      return {
+        activeRoom: markRoomRead(room),
+        rooms: state.rooms.map(markRoomRead)
+      };
+    });
     if (room) {
       chatApi.markAsRead(room.id).catch(() => { });
     }
@@ -323,6 +333,21 @@ export const useChatStore = create((set) => ({
     }));
   },
 
+  markMessagesRead: (roomId, readerId, currentUserId) => {
+    if (String(readerId) === String(currentUserId)) return;
+
+    set((state) => ({
+      messages: {
+        ...state.messages,
+        [roomId]: (state.messages[roomId] || []).map((message) =>
+          String(message.sender?.id) === String(currentUserId)
+            ? { ...message, is_read: true }
+            : message
+        )
+      }
+    }));
+  },
+
   setUserOnline: (userId, isOnline) => {
     set((state) => {
       const onlineUsers = new Set(state.onlineUsers);
@@ -358,5 +383,27 @@ export const useChatStore = create((set) => ({
 
   setOnlineUsers: (userIds) => {
     set({ onlineUsers: new Set(userIds) });
+  },
+
+  clearOnlineUsers: () => {
+    set((state) => {
+      const updateRoomParticipants = (room) => {
+        if (!room?.participants_info) return room;
+
+        return {
+          ...room,
+          participants_info: room.participants_info.map((participant) => ({
+            ...participant,
+            user: participant.user ? { ...participant.user, is_online: false } : participant.user
+          }))
+        };
+      };
+
+      return {
+        onlineUsers: new Set(),
+        rooms: state.rooms.map(updateRoomParticipants),
+        activeRoom: updateRoomParticipants(state.activeRoom)
+      };
+    });
   }
 }));

@@ -10,7 +10,7 @@ from rest_framework.exceptions import NotFound, ValidationError, PermissionDenie
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 import mimetypes
 import os
-from django.db.models import Count, Max, OuterRef, Q, Subquery
+from django.db.models import Count, Exists, Max, OuterRef, Q, Subquery
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 from django.db import IntegrityError
@@ -19,7 +19,7 @@ from channels.layers import get_channel_layer
 from django.contrib.auth import get_user_model
 from collections import defaultdict
 from .utils import flatten_rooms
-from .models import ChatRoom, RoomParticipant, Message
+from .models import ChatRoom, Message, MessageRead, RoomParticipant
 from .serializers import (
     ChatRoomSerializer,
     ChatRoomCreateSerializer,
@@ -416,8 +416,13 @@ class MessageListView(generics.ListCreateAPIView):
             ).filter(Q(parent__isnull=True) | Q(parent__is_active=True)),
             id=room_id,
         )
-        return Message.objects.filter(room=room, is_deleted=False).select_related(
-            "sender", "reply_to"
+        read_by_other = MessageRead.objects.filter(message_id=OuterRef("pk")).exclude(
+            user=self.request.user
+        )
+        return (
+            Message.objects.filter(room=room, is_deleted=False)
+            .select_related("sender", "reply_to")
+            .annotate(is_read=Exists(read_by_other))
         )
 
     def create(self, request, *args, **kwargs):

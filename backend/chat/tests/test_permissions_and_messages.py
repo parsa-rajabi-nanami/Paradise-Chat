@@ -248,3 +248,30 @@ def test_room_list_summary_is_ordered_and_scoped(user_factory, room_factory, jwt
     assert owner_room["last_message"]["content"] == "latest message"
     assert owner_room["unread_count"] == 0
     assert member_room["unread_count"] == 1
+
+
+def test_read_receipt_updates_message_status_and_unread_count(
+    user_factory, room_factory, jwt_for
+):
+    sender = user_factory("read_sender")
+    reader = user_factory("read_reader")
+    room = room_factory(owner=sender, members=[reader])
+    sender_client = authenticated_client(sender, jwt_for)
+    reader_client = authenticated_client(reader, jwt_for)
+
+    created = sender_client.post(
+        f"/api/chat/rooms/{room.id}/messages/",
+        {"content": "read me"},
+        format="json",
+    )
+    message_id = created.json()["id"]
+
+    assert reader_client.post(f"/api/chat/rooms/{room.id}/read/").status_code == 200
+
+    message = sender_client.get(
+        f"/api/chat/rooms/{room.id}/messages/{message_id}/"
+    ).json()
+    room_summary = reader_client.get("/api/chat/rooms/").json()["results"][0]
+
+    assert message["is_read"] is True
+    assert room_summary["unread_count"] == 0
