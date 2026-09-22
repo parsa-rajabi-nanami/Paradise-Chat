@@ -10,6 +10,8 @@ DEBUG = True
 # Development-only secret key.
 # Never use this value in staging or production environments.
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-only-key-set-DJANGO_SECRET_KEY")
+if not os.environ.get("JWT_SIGNING_KEY"):
+    SIMPLE_JWT["SIGNING_KEY"] = SECRET_KEY
 
 ALLOWED_HOSTS = ["localhost", "127.0.0.1", "0.0.0.0"]
 

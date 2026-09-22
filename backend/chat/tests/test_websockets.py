@@ -5,6 +5,7 @@ import pytest
 from asgiref.sync import async_to_sync
 from channels.routing import URLRouter
 from channels.testing import WebsocketCommunicator
+from django.contrib.auth.models import AnonymousUser
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
 from django.test import override_settings
@@ -157,6 +158,8 @@ async def _chat_consumer_rate_guard(websocket_room):
         await socket.send_json_to({"type": "unknown"})
         await socket.send_json_to({"type": "unknown"})
         await socket.send_json_to({"type": "unknown"})
+        assert (await socket.receive_json_from())["code"] == "unsupported_type"
+        assert (await socket.receive_json_from())["code"] == "unsupported_type"
         limited = await socket.receive_json_from()
         assert limited["type"] == "error"
         assert limited["code"] == "rate_limited"
@@ -165,6 +168,48 @@ async def _chat_consumer_rate_guard(websocket_room):
 
 def test_chat_consumer_rate_guard(websocket_room):
     async_to_sync(_chat_consumer_rate_guard)(websocket_room)
+
+
+async def _chat_consumer_rejects_invalid_payload(websocket_room):
+    user, room = websocket_room
+    socket = await connect_room(user, room)
+
+    await socket.send_json_to([])
+    invalid_payload = await socket.receive_json_from()
+    assert invalid_payload["code"] == "invalid_payload"
+
+    await socket.send_json_to(
+        {"type": "message", "content": "hello", "reply_to": "bad-id"}
+    )
+    invalid_reply = await socket.receive_json_from()
+    assert invalid_reply["code"] == "invalid_reply"
+
+    await socket.send_json_to({"type": "heartbeat"})
+    assert await socket.receive_json_from() == {"type": "heartbeat_ack"}
+    await socket.disconnect()
+
+
+def test_chat_consumer_rejects_invalid_payload(websocket_room):
+    async_to_sync(_chat_consumer_rejects_invalid_payload)(websocket_room)
+
+
+async def _chat_consumer_rejects_anonymous():
+    socket = WebsocketCommunicator(
+        application_for_user(
+            AnonymousUser(),
+            CommunicatorChatConsumer,
+            r"ws/chat/(?P<room_id>[0-9a-f-]+)/$",
+        ),
+        "/ws/chat/00000000-0000-0000-0000-000000000000/",
+        headers=[(b"origin", b"http://testserver")],
+    )
+    connected, close_code = await socket.connect()
+    assert connected is False
+    assert close_code == 4003
+
+
+def test_chat_consumer_rejects_anonymous():
+    async_to_sync(_chat_consumer_rejects_anonymous)()
 
 
 async def _online_status_heartbeat(presence_user):

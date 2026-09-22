@@ -18,6 +18,8 @@ class WebSocketService {
   statusConnectionVersion = 0;
 
   heartbeatInterval = null;
+  roomHeartbeatInterval = null;
+  roomHeartbeatTimeout = null;
   messageHandlers = [];
   getWsUrl() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -70,6 +72,7 @@ class WebSocketService {
       console.log(`Connected to room ${roomId}`);
       useChatStore.getState().setSocketStatus('connected');
       this.reconnectAttempts = 0;
+      this.startRoomHeartbeat();
     };
 
     socket.onmessage = (event) => {
@@ -84,7 +87,8 @@ class WebSocketService {
     socket.onclose = (event) => {
       if (this.socket !== socket) return;
       console.log(`Disconnected from room ${roomId}`, event.code);
-      if (!event.wasClean && this.reconnectAttempts < this.maxReconnectAttempts) {
+      this.stopRoomHeartbeat();
+      if ((!event.wasClean || event.code === 4000) && this.reconnectAttempts < this.maxReconnectAttempts) {
         useChatStore.getState().setSocketStatus('connecting');
         this.scheduleReconnect();
       } else {
@@ -113,6 +117,8 @@ class WebSocketService {
       this.socket.close();
       this.socket = null;
     }
+
+    this.stopRoomHeartbeat();
 
     this.roomId = null;
     if (resetReconnectCount) {
@@ -265,6 +271,43 @@ class WebSocketService {
     }, 30000);
   }
 
+  startRoomHeartbeat() {
+    this.stopRoomHeartbeat();
+
+    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return;
+
+    this.roomHeartbeatInterval = setInterval(() => {
+      if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+        this.stopRoomHeartbeat();
+        return;
+      }
+
+      this.roomHeartbeatTimeout = setTimeout(() => {
+        this.roomHeartbeatTimeout = null;
+        if (this.socket?.readyState === WebSocket.OPEN) {
+          this.socket.close(4000, 'heartbeat timeout');
+        }
+      }, 15000);
+
+      try {
+        this.socket.send(JSON.stringify({ type: 'heartbeat' }));
+      } catch {
+        this.socket.close(4000, 'heartbeat send failed');
+      }
+    }, 30000);
+  }
+
+  stopRoomHeartbeat() {
+    if (this.roomHeartbeatInterval) {
+      clearInterval(this.roomHeartbeatInterval);
+      this.roomHeartbeatInterval = null;
+    }
+    if (this.roomHeartbeatTimeout) {
+      clearTimeout(this.roomHeartbeatTimeout);
+      this.roomHeartbeatTimeout = null;
+    }
+  }
+
   stopHeartbeat() {
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
@@ -276,6 +319,12 @@ class WebSocketService {
     const chatStore = useChatStore.getState();
 
     switch (data.type) {
+      case 'heartbeat_ack':
+        if (this.roomHeartbeatTimeout) {
+          clearTimeout(this.roomHeartbeatTimeout);
+          this.roomHeartbeatTimeout = null;
+        }
+        break;
       case 'message':
         if (data.message && this.roomId) {
           chatStore.addMessage(this.roomId, data.message);

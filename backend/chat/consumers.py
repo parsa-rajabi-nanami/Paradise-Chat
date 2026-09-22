@@ -7,6 +7,7 @@ import asyncio
 import json
 import logging
 import time
+import uuid
 from collections import deque
 from datetime import timedelta
 
@@ -36,6 +37,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         self.room_id = self.scope["url_route"]["kwargs"]["room_id"]
         self.room_group_name = f"chat_{self.room_id}"
         self.user = self.scope["user"]
+        self.joined_room = False
         self._rate_limit_events = deque()
 
         # Reject if not authenticated
@@ -43,7 +45,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             logger.warning(
                 f"Rejected anonymous WebSocket connection to room {self.room_id}"
             )
-            await self.close()
+            await self.close(code=4003)
             return
 
         # Check if room is active
@@ -51,35 +53,50 @@ class ChatConsumer(AsyncWebsocketConsumer):
             logger.warning(
                 f"Rejected connection: Room {self.room_id} is inactive or does not exist"
             )
-            await self.close()
+            await self.close(code=4003)
             return
 
         # Verify user is a participant
         if not await self.is_room_participant():
             logger.warning(f"User {self.user.id} not in room {self.room_id}")
-            await self.close()
+            await self.close(code=4003)
             return
 
         # Join room group
-        await self.channel_layer.group_add(self.room_group_name, self.channel_name)
+        try:
+            await self.channel_layer.group_add(self.room_group_name, self.channel_name)
+            self.joined_room = True
+            await self.accept()
 
-        await self.accept()
-
-        # Notify room of user joining
-        await self.channel_layer.group_send(
-            self.room_group_name,
-            {
-                "type": "user_join",
-                "user_id": self.user.id,
-                "username": self.user.username,
-            },
-        )
+            # Notify room of user joining
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    "type": "user_join",
+                    "user_id": self.user.id,
+                    "username": self.user.username,
+                },
+            )
+        except Exception:
+            logger.exception("Unable to establish room WebSocket session")
+            if self.joined_room:
+                try:
+                    await self.channel_layer.group_discard(
+                        self.room_group_name, self.channel_name
+                    )
+                except Exception:
+                    logger.debug(
+                        "Unable to discard failed room WebSocket session", exc_info=True
+                    )
+            self.joined_room = False
+            await self.close(code=1013)
+            return
 
         logger.info(f"User {self.user.username} connected to room {self.room_id}")
 
     async def disconnect(self, close_code):
         """Handle WebSocket disconnection."""
-        if hasattr(self, "room_group_name") and not self.user.is_anonymous:
+        if getattr(self, "joined_room", False) and not self.user.is_anonymous:
             # Clear typing status
             await self.set_typing_status(False)
 
@@ -131,7 +148,15 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
         try:
             data = json.loads(text_data)
+            if not isinstance(data, dict):
+                await self.send_error("invalid_payload", "A JSON object is required.")
+                return
+
             message_type = data.get("type")
+
+            if message_type == "heartbeat":
+                await self.send(text_data=json.dumps({"type": "heartbeat_ack"}))
+                return
 
             handlers = {
                 "message": self.handle_message,
@@ -145,12 +170,18 @@ class ChatConsumer(AsyncWebsocketConsumer):
             if handler:
                 await handler(data)
             else:
-                logger.warning(f"Unknown message type: {message_type}")
+                await self.send_error("unsupported_type", "Unsupported message type.")
 
         except json.JSONDecodeError:
-            logger.error("Invalid JSON received")
+            await self.send_error("invalid_json", "Invalid JSON payload.")
         except Exception as e:
             logger.error(f"Error handling message: {e}")
+
+    async def send_error(self, code, detail):
+        """Return a stable protocol error without exposing server internals."""
+        await self.send(
+            text_data=json.dumps({"type": "error", "code": code, "detail": detail})
+        )
 
     async def refresh_authenticated_user(self):
         """Revalidate middleware-provided JWTs during long-lived sessions."""
@@ -189,11 +220,18 @@ class ChatConsumer(AsyncWebsocketConsumer):
         reply_to = data.get("reply_to")
 
         if reply_to:
+            try:
+                reply_to = str(uuid.UUID(str(reply_to)))
+            except (ValueError, TypeError, AttributeError):
+                await self.send_error("invalid_reply", "reply_to must be a UUID.")
+                return
             valid_reply = await self.is_valid_reply(reply_to)
             if not valid_reply:
+                await self.send_error("invalid_reply", "Reply target is not available.")
                 return
 
         if not content:
+            await self.send_error("invalid_message", "Message content cannot be empty.")
             return
 
         # Save message to database
@@ -250,6 +288,15 @@ class ChatConsumer(AsyncWebsocketConsumer):
         new_content = raw_content.strip()
 
         if not message_id or not new_content:
+            await self.send_error(
+                "invalid_message", "A message ID and content are required."
+            )
+            return
+
+        try:
+            message_id = str(uuid.UUID(str(message_id)))
+        except (ValueError, TypeError, AttributeError):
+            await self.send_error("invalid_message", "message_id must be a UUID.")
             return
 
         message = await self.edit_message(message_id, new_content)
@@ -268,6 +315,13 @@ class ChatConsumer(AsyncWebsocketConsumer):
         message_id = data.get("message_id")
 
         if not message_id:
+            await self.send_error("invalid_message", "message_id is required.")
+            return
+
+        try:
+            message_id = str(uuid.UUID(str(message_id)))
+        except (ValueError, TypeError, AttributeError):
+            await self.send_error("invalid_message", "message_id must be a UUID.")
             return
 
         success = await self.delete_message(message_id)
@@ -542,7 +596,7 @@ class OnlineStatusConsumer(AsyncWebsocketConsumer):
         self.user = self.scope["user"]
 
         if self.user.is_anonymous:
-            await self.close()
+            await self.close(code=4003)
             return
 
         self.status_group = "online_status"

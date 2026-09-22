@@ -34,7 +34,7 @@ The following variables are read by Django or the Compose backend service:
 | `DEV_USE_SQLITE` | `0` | No | Set to `1` for the deliberate development SQLite fallback |
 | `ALLOWED_HOSTS` | Local hosts in development | Production: yes | Comma-separated host names accepted by Django |
 | `CORS_ALLOWED_ORIGINS` | Open in development | Production: yes | Comma-separated browser origins, including the scheme |
-| `SECURE_SSL_REDIRECT` | `True` in production | No | Redirect HTTP to HTTPS when the proxy forwards HTTPS correctly |
+| `SECURE_SSL_REDIRECT` | `True` in production and Compose | No | Redirect HTTP to HTTPS when the proxy forwards HTTPS correctly. Set `False` only for a deliberately HTTP-only internal hop behind a trusted TLS terminator |
 | `ACCESS_TOKEN_MINUTES` | `30` development, `15` production | No | Access JWT lifetime and WebSocket query-token exposure window |
 | `LOGIN_THROTTLE_RATE` | `10/minute` | No | Login attempts per throttle window |
 | `REGISTER_THROTTLE_RATE` | `5/hour` | No | Registration attempts per throttle window |

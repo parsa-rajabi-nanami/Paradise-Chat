@@ -9,6 +9,22 @@ from django.core.exceptions import ImproperlyConfigured
 from .base import *
 
 
+def parse_bool(name, default=True):
+    """Parse an environment boolean without accepting ambiguous values."""
+
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ImproperlyConfigured(
+        f"{name} must be one of: 1, 0, true, false, yes, no, on, off."
+    )
+
+
 def require_production_secret(name):
     """Load a strong, non-template secret from the process environment."""
 
@@ -40,6 +56,8 @@ if not ALLOWED_HOSTS:
     raise ImproperlyConfigured(
         "ALLOWED_HOSTS must contain at least one host in production."
     )
+if "*" in ALLOWED_HOSTS:
+    raise ImproperlyConfigured("ALLOWED_HOSTS must not contain '*' in production.")
 
 # Security settings
 SECURE_BROWSER_XSS_FILTER = True
@@ -48,7 +66,7 @@ X_FRAME_OPTIONS = "DENY"
 SECURE_HSTS_SECONDS = 31536000
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
-SECURE_SSL_REDIRECT = os.environ.get("SECURE_SSL_REDIRECT", "True") == "True"
+SECURE_SSL_REDIRECT = parse_bool("SECURE_SSL_REDIRECT", default=True)
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
@@ -63,6 +81,23 @@ if not CORS_ALLOWED_ORIGINS:
     raise ImproperlyConfigured(
         "CORS_ALLOWED_ORIGINS must contain at least one origin in production."
     )
+if "*" in CORS_ALLOWED_ORIGINS:
+    raise ImproperlyConfigured(
+        "CORS_ALLOWED_ORIGINS must contain explicit origins in production."
+    )
+for origin in CORS_ALLOWED_ORIGINS:
+    parsed_origin = urlparse(origin)
+    if (
+        parsed_origin.scheme not in {"http", "https"}
+        or not parsed_origin.netloc
+        or parsed_origin.path not in {"", "/"}
+        or parsed_origin.params
+        or parsed_origin.query
+        or parsed_origin.fragment
+    ):
+        raise ImproperlyConfigured(
+            "CORS_ALLOWED_ORIGINS must contain absolute http(s) origins without paths."
+        )
 CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
 

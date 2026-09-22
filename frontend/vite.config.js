@@ -8,9 +8,26 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const backendUrl = (env.VITE_DEV_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '');
+  const siteUrl = (env.VITE_SITE_URL || 'http://localhost')
+    .trim()
+    .replace(/\/+$/, '');
+  const escapedSiteUrl = siteUrl.replace(/[&<>"']/g, character => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[character]));
 
   return {
     plugins: [
+      {
+        name: 'default-canonical-site-url',
+        transformIndexHtml: {
+          order: 'pre',
+          handler: html => html.replaceAll('%VITE_SITE_URL%', escapedSiteUrl)
+        }
+      },
       react(),
     ],
     resolve: {

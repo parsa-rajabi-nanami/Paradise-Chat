@@ -162,9 +162,10 @@ SIMPLE_JWT = {
     "BLACKLIST_AFTER_ROTATION": True,
     "UPDATE_LAST_LOGIN": True,
     "ALGORITHM": "HS256",
-    "SIGNING_KEY": os.environ.get(
-        "JWT_SIGNING_KEY", os.environ.get("DJANGO_SECRET_KEY", "dev-only-signing-key")
-    ),
+    # Environment-specific settings must provide the signing key.  Keeping a
+    # usable fallback here makes an accidentally incomplete settings module
+    # silently start with a predictable JWT secret.
+    "SIGNING_KEY": os.environ.get("JWT_SIGNING_KEY", ""),
     "AUTH_HEADER_TYPES": ("Bearer",),
     "AUTH_HEADER_NAME": "HTTP_AUTHORIZATION",
     "USER_ID_FIELD": "id",

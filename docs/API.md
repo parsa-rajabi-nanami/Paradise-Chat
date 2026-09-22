@@ -107,8 +107,9 @@ The room socket accepts these client frames:
 | `read` | None | Mark the room as read |
 | `edit` | `message_id`, `content` | Edit the sender's text message |
 | `delete` | `message_id` | Soft-delete the sender's message |
+| `heartbeat` | None | Keep the room socket alive; the server replies with `heartbeat_ack` |
 
-The status socket accepts `{"type":"heartbeat"}` every 30 seconds. Server event types include `message`, `typing`, `edit`, `delete`, `user_join`, `user_leave`, `read`, and `status`. Event payloads are shared with the frontend WebSocket service, so consumers should preserve existing fields when extending them.
+The room and status sockets accept `{"type":"heartbeat"}` every 30 seconds. Both reply with `{"type":"heartbeat_ack"}`. Anonymous, expired, or non-participant connections are rejected with WebSocket close code `4003`; an authenticated connection whose token expires is closed with `4001`. Server event types include `message`, `typing`, `edit`, `delete`, `user_join`, `user_leave`, `read`, and `status`. Event payloads are shared with the frontend WebSocket service, so consumers should preserve existing fields when extending them.
 
 ## Common response codes
 
