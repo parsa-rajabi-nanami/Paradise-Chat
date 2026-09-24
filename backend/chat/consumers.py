@@ -380,7 +380,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
     async def room_changed(self, event):
         """Refresh a sidebar summary when another session changes a room."""
-        await self.send(text_data=json.dumps({"type": "room_changed", "room_id": event["room_id"]}))
+        await self.send(
+            text_data=json.dumps({"type": "room_changed", "room_id": event["room_id"]})
+        )
 
     async def message_edited(self, event):
         """Send edited message to WebSocket."""
@@ -691,7 +693,11 @@ class OnlineStatusConsumer(AsyncWebsocketConsumer):
                 for user_id in stale_user_ids:
                     await self.channel_layer.group_send(
                         self.status_group,
-                        {"type": "status_update", "user_id": user_id, "is_online": False},
+                        {
+                            "type": "status_update",
+                            "user_id": user_id,
+                            "is_online": False,
+                        },
                     )
         except json.JSONDecodeError:
             pass
@@ -721,13 +727,15 @@ class OnlineStatusConsumer(AsyncWebsocketConsumer):
     def expire_stale_presence(self):
         cutoff = timezone.now() - timedelta(seconds=90)
         stale_ids = set(
-            UserPresence.objects.filter(last_heartbeat__lt=cutoff)
-            .values_list("user_id", flat=True)
+            UserPresence.objects.filter(last_heartbeat__lt=cutoff).values_list(
+                "user_id", flat=True
+            )
         )
         UserPresence.objects.filter(last_heartbeat__lt=cutoff).delete()
         still_active = set(
-            UserPresence.objects.filter(user_id__in=stale_ids)
-            .values_list("user_id", flat=True)
+            UserPresence.objects.filter(user_id__in=stale_ids).values_list(
+                "user_id", flat=True
+            )
         )
         expired = stale_ids - still_active
         if expired:
@@ -753,11 +761,15 @@ class OnlineStatusConsumer(AsyncWebsocketConsumer):
         )
 
     async def room_changed(self, event):
-        await self.send(text_data=json.dumps({
-            "type": "room_changed",
-            "room_id": event["room_id"],
-            "receipt": event.get("receipt"),
-        }))
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "type": "room_changed",
+                    "room_id": event["room_id"],
+                    "receipt": event.get("receipt"),
+                }
+            )
+        )
 
     @database_sync_to_async
     def set_online_status(self, is_online):

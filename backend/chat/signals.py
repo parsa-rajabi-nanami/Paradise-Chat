@@ -28,6 +28,7 @@ def notify_message_change(sender, instance, **kwargs):
     from .events import notify_room
 
     room_id = instance.room_id
+
     def publish():
         try:
             notify_room(room_id)

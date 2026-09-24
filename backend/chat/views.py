@@ -42,8 +42,12 @@ def with_room_summaries(queryset, user):
     )
     unread = (
         Message.objects.filter(room_id=OuterRef("pk"), is_deleted=False)
-        .exclude(sender=user).exclude(read_by__user=user).order_by()
-        .values("room_id").annotate(total=Count("pk")).values("total")
+        .exclude(sender=user)
+        .exclude(read_by__user=user)
+        .order_by()
+        .values("room_id")
+        .annotate(total=Count("pk"))
+        .values("total")
     )
     return queryset.annotate(
         summary_message_id=Subquery(latest.values("id")[:1]),
@@ -418,9 +422,11 @@ class MessageListView(generics.ListCreateAPIView):
             .select_related("sender", "reply_to")
             .annotate(
                 is_read=Exists(read_by_other),
-                read_by_me=Exists(MessageRead.objects.filter(
-                    message_id=OuterRef("pk"), user=self.request.user
-                )),
+                read_by_me=Exists(
+                    MessageRead.objects.filter(
+                        message_id=OuterRef("pk"), user=self.request.user
+                    )
+                ),
             )
         )
 
@@ -678,7 +684,6 @@ class MarkAsReadView(APIView):
 
         notify_room(room.id, receipt)
         return Response(receipt)
-
 
 
 class TypingStatusView(APIView):

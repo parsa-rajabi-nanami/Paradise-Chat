@@ -161,8 +161,10 @@ class RoomParticipant(models.Model):
             self.last_read_at = timezone.now()
             self.save(update_fields=["last_read_at"])
             receipt = {
-                "type": "read_receipt", "room_id": str(self.room_id),
-                "user_id": self.user_id, "username": self.user.username,
+                "type": "read_receipt",
+                "room_id": str(self.room_id),
+                "user_id": self.user_id,
+                "username": self.user.username,
                 "read_at": self.last_read_at.isoformat(),
                 "message_ids": [str(pk) for pk in ids],
             }
