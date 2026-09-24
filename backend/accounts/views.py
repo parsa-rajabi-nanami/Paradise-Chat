@@ -24,7 +24,6 @@ from .serializers import (
     UserDeleteSerializer,
 )
 from chat.models import ChatRoom, Message, RoomParticipant
-from .models import UserPresence
 from chat.config import get_chat_configuration
 from chat.throttles import FileUploadRateThrottle
 from chat_project.media import protected_file_response
@@ -93,9 +92,8 @@ class LogoutView(APIView):
                 token = RefreshToken(refresh_token)
                 token.blacklist()
 
-            # Set user offline
-            UserPresence.objects.filter(user=request.user).delete()
-            request.user.set_offline()
+            # The client closes its own socket; other devices keep their presence.
+            # Abrupt exits expire through the heartbeat lease.
 
             return Response(
                 {"message": "Successfully logged out."}, status=status.HTTP_200_OK

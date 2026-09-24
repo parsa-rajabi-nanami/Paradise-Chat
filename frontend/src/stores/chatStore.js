@@ -23,6 +23,12 @@ export const useChatStore = create((set) => ({
     }
   },
 
+  refreshRooms: async () => {
+    const rooms = await chatApi.getRooms();
+    set({ rooms });
+    return rooms;
+  },
+
   setActiveRoom: (room) => {
     set((state) => {
       if (!room) return { activeRoom: null };
@@ -333,19 +339,25 @@ export const useChatStore = create((set) => ({
     }));
   },
 
-  markMessagesRead: (roomId, readerId, currentUserId) => {
+  markMessagesRead: (roomId, readerId, currentUserId, messageIds = []) => {
     if (String(readerId) === String(currentUserId)) return;
 
     set((state) => ({
       messages: {
         ...state.messages,
         [roomId]: (state.messages[roomId] || []).map((message) =>
-          String(message.sender?.id) === String(currentUserId)
+          String(message.sender?.id) === String(currentUserId) &&
+          (!messageIds.length || messageIds.includes(message.id))
             ? { ...message, is_read: true }
             : message
         )
       }
     }));
+  },
+
+  markVisibleMessagesRead: async (roomId, messageIds) => {
+    if (!roomId || !messageIds?.length) return;
+    await chatApi.markAsRead(roomId, messageIds);
   },
 
   setUserOnline: (userId, isOnline) => {

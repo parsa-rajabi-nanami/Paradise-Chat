@@ -170,6 +170,17 @@ class WebSocketService {
         const data = JSON.parse(event.data);
         if (data.type === 'status') {
           useChatStore.getState().setUserOnline(data.user_id, data.is_online);
+        } else if (data.type === 'room_changed') {
+          const receipt = data.receipt;
+          if (receipt?.user_id && receipt.message_ids?.length) {
+            useChatStore.getState().markMessagesRead(
+              receipt.room_id,
+              receipt.user_id,
+              useAuthStore.getState().user?.id,
+              receipt.message_ids
+            );
+          }
+          useChatStore.getState().refreshRooms().catch(() => {});
         }
       } catch (error) {
         console.error('Failed to parse status message:', error);
@@ -358,7 +369,8 @@ class WebSocketService {
           chatStore.markMessagesRead(
             this.roomId,
             data.user_id,
-            useAuthStore.getState().user?.id
+            useAuthStore.getState().user?.id,
+            data.message_ids
           );
         }
         break;
@@ -443,8 +455,8 @@ class WebSocketService {
     return sent;
   }
 
-  sendRead() {
-    this.sendSocketMessage({ type: 'read' });
+  sendRead(messageIds = []) {
+    this.sendSocketMessage({ type: 'read', message_ids: messageIds });
   }
 
   editMessage(messageId, content) {

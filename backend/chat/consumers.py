@@ -267,17 +267,16 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
     async def handle_read(self, data):
         """Handle read receipt."""
-        await self.mark_as_read()
+        from .serializers import ReadReceiptSerializer
 
-        await self.channel_layer.group_send(
-            self.room_group_name,
-            {
-                "type": "read_receipt",
-                "user_id": self.user.id,
-                "username": self.user.username,
-                "read_at": timezone.now().isoformat(),
-            },
-        )
+        payload = ReadReceiptSerializer(data=data)
+        if not payload.is_valid():
+            await self.send_error("invalid_read", "Expected up to 100 message UUIDs.")
+            return
+        self.read_message_ids = payload.validated_data.get("message_ids")
+        receipt = await self.mark_as_read()
+        if receipt:
+            await self.channel_layer.group_send(self.room_group_name, receipt)
 
     async def handle_edit(self, data):
         """Handle message edit."""
@@ -373,9 +372,15 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     "user_id": event["user_id"],
                     "username": event["username"],
                     "read_at": event["read_at"],
+                    "room_id": event["room_id"],
+                    "message_ids": event["message_ids"],
                 }
             )
         )
+
+    async def room_changed(self, event):
+        """Refresh a sidebar summary when another session changes a room."""
+        await self.send(text_data=json.dumps({"type": "room_changed", "room_id": event["room_id"]}))
 
     async def message_edited(self, event):
         """Send edited message to WebSocket."""
@@ -525,7 +530,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             participant = RoomParticipant.objects.get(
                 room_id=self.room_id, user=self.user
             )
-            participant.mark_as_read()
+            return participant.mark_as_read(getattr(self, "read_message_ids", None))
         except RoomParticipant.DoesNotExist:
             pass
 
@@ -600,9 +605,11 @@ class OnlineStatusConsumer(AsyncWebsocketConsumer):
             return
 
         self.status_group = "online_status"
+        self.user_group = f"user_{self.user.id}"
 
         # Join status group
         await self.channel_layer.group_add(self.status_group, self.channel_name)
+        await self.channel_layer.group_add(self.user_group, self.channel_name)
 
         await self.accept()
 
@@ -667,6 +674,7 @@ class OnlineStatusConsumer(AsyncWebsocketConsumer):
 
             # Leave status group
             await self.channel_layer.group_discard(self.status_group, self.channel_name)
+            await self.channel_layer.group_discard(self.user_group, self.channel_name)
 
             logger.info(f"User {self.user.username} is now offline")
 
@@ -679,6 +687,12 @@ class OnlineStatusConsumer(AsyncWebsocketConsumer):
             if data.get("type") == "heartbeat":
                 await self.send(text_data=json.dumps({"type": "heartbeat_ack"}))
                 asyncio.create_task(self._touch_presence_safely())
+                stale_user_ids = await self.expire_stale_presence()
+                for user_id in stale_user_ids:
+                    await self.channel_layer.group_send(
+                        self.status_group,
+                        {"type": "status_update", "user_id": user_id, "is_online": False},
+                    )
         except json.JSONDecodeError:
             pass
 
@@ -703,6 +717,25 @@ class OnlineStatusConsumer(AsyncWebsocketConsumer):
         except Exception:
             logger.debug("Unable to update presence heartbeat", exc_info=True)
 
+    @database_sync_to_async
+    def expire_stale_presence(self):
+        cutoff = timezone.now() - timedelta(seconds=90)
+        stale_ids = set(
+            UserPresence.objects.filter(last_heartbeat__lt=cutoff)
+            .values_list("user_id", flat=True)
+        )
+        UserPresence.objects.filter(last_heartbeat__lt=cutoff).delete()
+        still_active = set(
+            UserPresence.objects.filter(user_id__in=stale_ids)
+            .values_list("user_id", flat=True)
+        )
+        expired = stale_ids - still_active
+        if expired:
+            User.objects.filter(id__in=expired).update(
+                is_online=False, last_seen=timezone.now()
+            )
+        return list(expired)
+
     async def status_update(self, event):
         """Send status update to WebSocket."""
         # The connecting client receives its own state in the snapshot above.
@@ -718,6 +751,13 @@ class OnlineStatusConsumer(AsyncWebsocketConsumer):
                 }
             )
         )
+
+    async def room_changed(self, event):
+        await self.send(text_data=json.dumps({
+            "type": "room_changed",
+            "room_id": event["room_id"],
+            "receipt": event.get("receipt"),
+        }))
 
     @database_sync_to_async
     def set_online_status(self, is_online):

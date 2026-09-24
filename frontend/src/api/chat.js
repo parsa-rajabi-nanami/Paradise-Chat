@@ -93,8 +93,10 @@ export const chatApi = {
     await apiClient.delete(`/chat/rooms/${roomId}/messages/${messageId}/`);
   },
 
-  markAsRead: async roomId => {
-    await apiClient.post(`/chat/rooms/${roomId}/read/`, {});
+  markAsRead: async (roomId, messageIds) => {
+    const body = messageIds?.length ? { message_ids: messageIds } : {};
+    const response = await apiClient.post(`/chat/rooms/${roomId}/read/`, body);
+    return response.data;
   },
 
   updateTypingStatus: async (roomId, isTyping) => {

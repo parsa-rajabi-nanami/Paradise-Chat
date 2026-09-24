@@ -143,7 +143,7 @@ class RoomParticipant(models.Model):
     def __str__(self):
         return f"{self.user.username} in {self.room}"
 
-    def mark_as_read(self):
+    def mark_as_read(self, message_ids=None):
         """Mark all messages as read for this participant."""
         with transaction.atomic():
             unread_messages = (
@@ -151,13 +151,22 @@ class RoomParticipant(models.Model):
                 .exclude(sender=self.user)
                 .exclude(read_by__user=self.user)
             )
-            new_reads = [
-                MessageRead(message=msg, user=self.user) for msg in unread_messages
-            ]
+            # Acknowledge only messages actually visible when IDs are provided.
+            if message_ids is not None:
+                unread_messages = unread_messages.filter(pk__in=message_ids)
+            ids = list(unread_messages.values_list("pk", flat=True))
+            new_reads = [MessageRead(message_id=pk, user=self.user) for pk in ids]
             if new_reads:
                 MessageRead.objects.bulk_create(new_reads, ignore_conflicts=True)
             self.last_read_at = timezone.now()
             self.save(update_fields=["last_read_at"])
+            receipt = {
+                "type": "read_receipt", "room_id": str(self.room_id),
+                "user_id": self.user_id, "username": self.user.username,
+                "read_at": self.last_read_at.isoformat(),
+                "message_ids": [str(pk) for pk in ids],
+            }
+        return receipt
 
     def set_typing(self, is_typing):
         """Update typing status."""

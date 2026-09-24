@@ -11,6 +11,7 @@ from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 import mimetypes
 import os
 from django.db.models import Count, Exists, Max, OuterRef, Q, Subquery
+from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 from django.db import IntegrityError
@@ -39,21 +40,18 @@ def with_room_summaries(queryset, user):
     latest = Message.objects.filter(room_id=OuterRef("pk"), is_deleted=False).order_by(
         "-created_at"
     )
+    unread = (
+        Message.objects.filter(room_id=OuterRef("pk"), is_deleted=False)
+        .exclude(sender=user).exclude(read_by__user=user).order_by()
+        .values("room_id").annotate(total=Count("pk")).values("total")
+    )
     return queryset.annotate(
         summary_message_id=Subquery(latest.values("id")[:1]),
         summary_content=Subquery(latest.values("content")[:1]),
         summary_sender=Subquery(latest.values("sender__username")[:1]),
         summary_created_at=Subquery(latest.values("created_at")[:1]),
         summary_message_type=Subquery(latest.values("message_type")[:1]),
-        unread_count_for_user=Count(
-            "messages",
-            filter=(
-                Q(messages__is_deleted=False)
-                & ~Q(messages__sender=user)
-                & ~Q(messages__read_by__user=user)
-            ),
-            distinct=True,
-        ),
+        unread_count_for_user=Coalesce(Subquery(unread), 0),
     )
 
 
@@ -151,10 +149,6 @@ class ChatRoomDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_object(self):
         room = get_object_or_404(self.get_queryset(), id=self.kwargs["room_id"])
-        # Mark as read when viewing
-        participant = room.room_participants.filter(user=self.request.user).first()
-        if participant:
-            participant.mark_as_read()
         return room
 
     def destroy(self, request, *args, **kwargs):
@@ -422,7 +416,12 @@ class MessageListView(generics.ListCreateAPIView):
         return (
             Message.objects.filter(room=room, is_deleted=False)
             .select_related("sender", "reply_to")
-            .annotate(is_read=Exists(read_by_other))
+            .annotate(
+                is_read=Exists(read_by_other),
+                read_by_me=Exists(MessageRead.objects.filter(
+                    message_id=OuterRef("pk"), user=self.request.user
+                )),
+            )
         )
 
     def create(self, request, *args, **kwargs):
@@ -670,20 +669,16 @@ class MarkAsReadView(APIView):
             id=room_id,
         )
         participant = room.room_participants.filter(user=request.user).first()
-        if participant:
-            participant.mark_as_read()
-            channel_layer = get_channel_layer()
-            if channel_layer:
-                async_to_sync(channel_layer.group_send)(
-                    f"chat_{room.id}",
-                    {
-                        "type": "read_receipt",
-                        "user_id": request.user.id,
-                        "username": request.user.username,
-                        "read_at": participant.last_read_at.isoformat(),
-                    },
-                )
-        return Response({"message": "Marked as read"})
+        from .serializers import ReadReceiptSerializer
+
+        payload = ReadReceiptSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        receipt = participant.mark_as_read(payload.validated_data.get("message_ids"))
+        from .events import notify_room
+
+        notify_room(room.id, receipt)
+        return Response(receipt)
+
 
 
 class TypingStatusView(APIView):

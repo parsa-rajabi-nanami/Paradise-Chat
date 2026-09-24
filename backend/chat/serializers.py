@@ -15,6 +15,12 @@ from accounts.avatar_processing import process_avatar
 User = get_user_model()
 
 
+class ReadReceiptSerializer(serializers.Serializer):
+    message_ids = serializers.ListField(
+        child=serializers.UUIDField(), max_length=100, required=False
+    )
+
+
 class MessageSerializer(serializers.ModelSerializer):
     """Serializer for messages."""
 
@@ -23,6 +29,7 @@ class MessageSerializer(serializers.ModelSerializer):
     reply_to_preview = serializers.SerializerMethodField()
     is_own_message = serializers.SerializerMethodField()
     is_read = serializers.SerializerMethodField()
+    read_by_me = serializers.SerializerMethodField()
 
     class Meta:
         model = Message
@@ -40,6 +47,7 @@ class MessageSerializer(serializers.ModelSerializer):
             "created_at",
             "is_own_message",
             "is_read",
+            "read_by_me",
         )
         read_only_fields = (
             "id",
@@ -83,6 +91,12 @@ class MessageSerializer(serializers.ModelSerializer):
         if request and request.user:
             return obj.sender_id == request.user.id
         return False
+
+    def get_read_by_me(self, obj):
+        if hasattr(obj, "read_by_me"):
+            return obj.read_by_me
+        request = self.context.get("request")
+        return bool(request and obj.read_by.filter(user=request.user).exists())
 
     def get_is_read(self, obj):
         """Return whether another participant has read a sent message."""

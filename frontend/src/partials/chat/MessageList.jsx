@@ -19,6 +19,15 @@ export function MessageList({
   const user = useAuthStore((state) => state.user);
   const updateMessage = useChatStore((state) => state.updateMessage);
   const deleteMessage = useChatStore((state) => state.deleteMessage);
+  const markVisibleMessagesRead = useChatStore((state) => state.markVisibleMessagesRead);
+
+  useEffect(() => {
+    if (!room?.id || !messages.length || document.visibilityState !== 'visible') return;
+    const ids = messages
+      .filter((message) => String(message.sender?.id) !== String(user?.id))
+      .map((message) => message.id);
+    if (ids.length) markVisibleMessagesRead(room.id, ids).catch(() => {});
+  }, [messages, room?.id, user?.id, markVisibleMessagesRead]);
 
   // Reset initial mount flag before the message effect runs for a new room.
   useEffect(() => {
